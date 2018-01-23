@@ -1,0 +1,32 @@
+
+#include "cpu.h"
+#include "memory_map.h"
+#include <dirent.h>
+#include <stdio.h>
+#include <string.h>
+
+
+int main(int argc, char const *argv[]) {
+    struct dirent * bios_file;
+    DIR * bios_dir = opendir("bios/");
+    if(bios_dir == NULL){
+        printf("bios directory could not be opened\n");
+        return 1;
+    }
+    int bios_loaded = 0;
+    mm_initialise();
+    while ((bios_file = readdir(bios_dir)) != NULL) {
+        char filepath[80];
+        sprintf(filepath, "bios/%s", bios_file->d_name);
+        if(mm_load_bios(filepath) == MM_SUCCESS){
+            bios_loaded = 1;
+            break;
+        }
+    }
+    if (!bios_loaded) {
+        printf("No bios file were found. Exiting..\n");
+        return 1;
+    }
+
+    return 0;
+}
