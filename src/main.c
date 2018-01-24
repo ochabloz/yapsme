@@ -16,17 +16,22 @@ int main(int argc, char const *argv[]) {
     int bios_loaded = 0;
     mm_initialise();
     while ((bios_file = readdir(bios_dir)) != NULL) {
-        char filepath[80];
-        sprintf(filepath, "bios/%s", bios_file->d_name);
-        if(mm_load_bios(filepath) == MM_SUCCESS){
-            bios_loaded = 1;
-            break;
+        char filepath[85];
+        if(strlen(bios_file->d_name) <= 80){
+            sprintf(filepath, "bios/%s", bios_file->d_name);
+            if(mm_load_bios(filepath) == MM_SUCCESS){
+                bios_loaded = 1;
+                break;
+            }
         }
     }
     if (!bios_loaded) {
         printf("No bios file were found. Exiting..\n");
         return 1;
     }
-
+    cpu_initialise();
+    for (size_t i = 0; i < 10; i++) {
+        cpu_run(0);
+    }
     return 0;
 }
