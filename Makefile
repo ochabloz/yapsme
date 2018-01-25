@@ -45,7 +45,7 @@ test: makedir unittest
 
 unittest: $(OBJ_FILES_FLT) $(TST_OBJ_FILES)
 	$(CPP) -o $(OBJ_DIR)$@ $^ $(LDFLAGS) -L$(CPPUTEST_HOME)/lib -lCppUTest
-	$(OBJ_DIR)$@
+	$(OBJ_DIR)$@ -c
 
 
 
