@@ -3,12 +3,21 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
+#define CPU_REG_DELAY__DATA_READY_TO_BE_FETCHED 1
+#define CPU_REG_DELAY__DATA_IN_SKIP_SYNC 2
+#define CPU_REG_DELAY__NO_DATA_AVAILABLE 3
+
 struct cpu_struct {
     uint32_t regs [32];
     uint32_t PC;
     uint32_t HI;
     uint32_t LOW;
     uint32_t PC_delay;
+
+    uint8_t R_delay_reg;  // register delay slot
+    uint32_t R_delay_dat;
+    uint8_t R_delay_flag; // Status machine for the delay register
 
     uint32_t cp0_regs[64];
 };
@@ -50,6 +59,7 @@ void cpu_instruction_lui(uint8_t r_target, uint16_t immediate);
 void cpu_instruction_ori(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_or(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
 void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sll(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount);
 void cpu_instruction_addi(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_addiu(uint8_t r_source, uint8_t r_target, int16_t immediate);
@@ -111,6 +121,9 @@ void cpu_execute(uint32_t instruction){
             case 0x0F: // LUI  (Load Upper Immediate)
                 cpu_instruction_lui(rt, imm16);
                 break;
+            case 0x23:
+                cpu_instruction_lw(rs, rt, imm16);
+                break;
             case 0x2B:
                 cpu_instruction_sw(rs, rt, imm16);
                 break;
@@ -139,6 +152,14 @@ void cpu_execute(uint32_t instruction){
             }
         }
     }
+    if(cpu_state->R_delay_flag == CPU_REG_DELAY__DATA_IN_SKIP_SYNC){
+        cpu_state->R_delay_flag = CPU_REG_DELAY__DATA_READY_TO_BE_FETCHED;
+    }
+    else if(cpu_state->R_delay_flag == CPU_REG_DELAY__DATA_READY_TO_BE_FETCHED){
+        cpu_state->regs[cpu_state->R_delay_reg] = cpu_state->R_delay_dat;
+        cpu_state->R_delay_flag = CPU_REG_DELAY__NO_DATA_AVAILABLE;
+    }
+
     // update status at the end of execution
     cpu_state->regs[0] = 0;
     return;
@@ -179,9 +200,22 @@ uint32_t cpu_read_reg(uint8_t reg){
     return 0xFF;
 }
 
-void cpu_write_reg(uint8_t reg, uint32_t val){
+void cpu_write_reg(uint8_t reg, uint32_t val, uint8_t delay){
     if(reg < 32){
-        cpu_state->regs[reg] = val;
+        if(cpu_state->R_delay_flag == CPU_REG_DELAY__DATA_READY_TO_BE_FETCHED){
+            cpu_state->regs[cpu_state->R_delay_reg] = cpu_state->R_delay_dat;
+            cpu_state->R_delay_flag = CPU_REG_DELAY__NO_DATA_AVAILABLE;
+            // NOTE: In hardware it is likely that the cpu is paused until data from
+            //        memory is fetched. Hence some sort of cycle counter should be added.
+        }
+        if(delay == CPU_REG_DELAY_ON){
+            cpu_state->R_delay_reg = reg;
+            cpu_state->R_delay_dat = val;
+            cpu_state->R_delay_flag = CPU_REG_DELAY__DATA_IN_SKIP_SYNC;
+        }
+        else{
+            cpu_state->regs[reg] = val;
+        }
     }
     else if(reg == CPU_PC){
         cpu_state->PC = val;
@@ -191,6 +225,9 @@ void cpu_write_reg(uint8_t reg, uint32_t val){
     }
     else if(reg == CPU_LO){
         cpu_state->LOW = val;
+    }
+    else{
+        printf("ERROR :: Forbidden register write. PC @ 0x%08x\n", cpu_state->PC);
     }
 }
 
@@ -218,6 +255,12 @@ void cpu_instruction_lui(uint8_t r_target, uint16_t immediate){
 void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate){
     int imm = immediate << 16 >> 16;
     mm_write(imm + cpu_state->regs[r_source], cpu_state->regs[r_target]);
+}
+
+// load word : 32 bits loaded from memory to the target register (rt = mem[rs + imm16])
+void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t val = mm_read(cpu_state->regs[r_source] + immediate);
+    cpu_write_reg(r_target, val, CPU_REG_DELAY_ON);
 }
 
 // shift logical left

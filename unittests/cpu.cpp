@@ -8,7 +8,22 @@ extern "C"
 #include "unistd.h"
 }
 
-TEST_GROUP(cpu){};
+uint32_t instruction_assemble(uint8_t op, uint8_t r_target, uint8_t r_source, uint16_t imm16){
+    return (op << 26) | (r_target << 21) | (r_source << 16) | imm16;
+}
+
+TEST_GROUP(cpu){
+    void setup(){
+        mm_initialise();
+        mm_load_bios("bios/scph5502.bin");
+        cpu_initialise();
+    }
+
+    void teardown(){
+        cpu_desinit();
+        mm_desinit();
+    }
+};
 
 TEST(cpu, initialisation){
     cpu_desinit();
@@ -19,6 +34,18 @@ TEST(cpu, initialisation){
     LONGS_EQUAL(0, rep);
     rep = cpu_read_reg(CPU_PC);
     LONGS_EQUAL(0xbfc00000, rep); // this is the PC default value
+}
+
+TEST(cpu, read_write_register){
+    cpu_write_reg(9, 10, CPU_REG_DELAY_OFF);
+    LONGS_EQUAL(10, cpu_read_reg(9));
+    mm_write(0xa0000000, 0xAAAAAAAA);
+    cpu_write_reg(8, 0xa0000000, CPU_REG_DELAY_OFF);
+    cpu_execute(0x8d090000); // $9 = mem[$8 + 0]
+
+    LONGS_EQUAL(10, cpu_read_reg(9));
+    cpu_execute(0b110100010000110000000000000000); // $2 = $3 | 0
+    LONGS_EQUAL(0xAAAAAAAA, cpu_read_reg(9));
 }
 
 
@@ -53,7 +80,7 @@ TEST(cpu_instruction, ori){
 }
 
 TEST(cpu_instruction, sll){
-    cpu_write_reg(1, 0x10);
+    cpu_write_reg(1, 0x10, CPU_REG_DELAY_OFF);
     cpu_execute((0x1 << 16) | 0x2 << 11 | 0x3 << 6); // $2 = $1 << 3
     LONGS_EQUAL(0x10 << 3, cpu_read_reg(2));
     cpu_execute(0x00000000); // $0 = $0 << 0
@@ -62,12 +89,12 @@ TEST(cpu_instruction, sll){
 
 
 TEST(cpu_instruction, addiu){
-    cpu_write_reg(2, 10);
-    cpu_write_reg(3, 5);
+    cpu_write_reg(2, 10, CPU_REG_DELAY_OFF);
+    cpu_write_reg(3, 5, CPU_REG_DELAY_OFF);
     cpu_execute((0x9 << 26) | (0x2 << 21) | (0x3 << 16) | 20); // $2 = $1 << 3
     LONGS_EQUAL(30, cpu_read_reg(3));
 
-    cpu_write_reg(2, 0xFFFFFFFF);
+    cpu_write_reg(2, 0xFFFFFFFF, CPU_REG_DELAY_OFF);
     cpu_execute((0x9 << 26) | (0x2 << 21) | (0x3 << 16) | 0x2); // $2 = $1 << 3
     LONGS_EQUAL( 1, cpu_read_reg(3));
     // FIXME: Must check exception when overflow exception is implemented
@@ -81,21 +108,21 @@ TEST(cpu_instruction, jump){
 }
 
 TEST(cpu_instruction, bne){
-    cpu_write_reg(10, 0);
-    cpu_write_reg(11, 1);
+    cpu_write_reg(10, 0, CPU_REG_DELAY_OFF);
+    cpu_write_reg(11, 1, CPU_REG_DELAY_OFF);
     cpu_execute(0x154bfff7); // BNE $10, $11, -36
     cpu_execute(0x00000000); // nop
     LONGS_EQUAL(0xbfc00000 -36, cpu_read_reg(CPU_PC)); // branching must occurs since 0 != 1
 
-    cpu_write_reg(10, 1);
-    cpu_write_reg(CPU_PC, 0xbfc00000); // revert to default
+    cpu_write_reg(10, 1, CPU_REG_DELAY_OFF);
+    cpu_write_reg(CPU_PC, 0xbfc00000, CPU_REG_DELAY_OFF); // revert to default
     cpu_execute(0x154bfff7); // BNE $10, $11, -36
     cpu_execute(0x00000000); // nop
     LONGS_EQUAL(0xbfc00008 , cpu_read_reg(CPU_PC)); // branching must not occurs
 }
 
 TEST(cpu_instruction, mtc0){
-    cpu_write_reg(12, 0x00010000);
+    cpu_write_reg(12, 0x00010000, CPU_REG_DELAY_OFF);
     cpu_execute(0x408c6000);
     LONGS_EQUAL(0x00010000, cp0_read_reg(12));
 }

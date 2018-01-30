@@ -22,6 +22,8 @@ uint32_t cpu_read_reg(uint8_t reg);
 uint32_t cp0_read_reg(uint8_t reg);
 void cp0_write_reg(uint8_t reg, uint32_t val);
 
-void cpu_write_reg(uint8_t reg, uint32_t val);
+#define CPU_REG_DELAY_ON 1
+#define CPU_REG_DELAY_OFF 0
+void cpu_write_reg(uint8_t reg, uint32_t val, uint8_t delay);
 
 #endif
