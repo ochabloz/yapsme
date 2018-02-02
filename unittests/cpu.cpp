@@ -126,3 +126,33 @@ TEST(cpu_instruction, mtc0){
     cpu_execute(0x408c6000);
     LONGS_EQUAL(0x00010000, cp0_read_reg(12));
 }
+
+TEST(cpu_instruction, sltu){
+    // set on less than unsigned
+    // $d = ($s < $t) ? 1 : 0
+    cpu_write_reg(2, 0x00010000, CPU_REG_DELAY_OFF); // $s
+    cpu_write_reg(3, 0x00020000, CPU_REG_DELAY_OFF); // $t
+    cpu_execute(0x0043082b);
+    LONGS_EQUAL(1, cpu_read_reg(1));
+    cpu_write_reg(2, 0x00020000, CPU_REG_DELAY_OFF); // $s
+    cpu_execute(0x0043082b);
+    LONGS_EQUAL(0, cpu_read_reg(1));
+    cpu_write_reg(2, 0x00040000, CPU_REG_DELAY_OFF); // $s
+    cpu_write_reg(3, 0x00030000, CPU_REG_DELAY_OFF); // $t
+    cpu_execute(0x0043082b);
+    LONGS_EQUAL(0, cpu_read_reg(1));
+}
+
+
+TEST(cpu_instruction, sh){ // store half word
+    uint32_t instr = instruction_assemble(0x29, 1, 2, 0); // mem[$1] = $2
+    cpu_write_reg(2, 0xaaaa, CPU_REG_DELAY_OFF); // $s
+    cpu_write_reg(1, 100, CPU_REG_DELAY_OFF); // $s
+    cpu_execute(instr);
+    LONGS_EQUAL(0xaaaa, mm_read(100));
+
+    cpu_write_reg(2, 0xbbbb, CPU_REG_DELAY_OFF); // $s
+    cpu_write_reg(1, 102, CPU_REG_DELAY_OFF); // $s
+    cpu_execute(instr);
+    LONGS_EQUAL(0xbbbbaaaa, mm_read(100));
+}

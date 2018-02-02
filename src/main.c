@@ -30,7 +30,7 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     cpu_initialise();
-    for (size_t i = 0; i < 10; i++) {
+    for (size_t i = 0; i < 1700; i++) {
         cpu_run(0);
     }
     return 0;

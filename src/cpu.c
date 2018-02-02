@@ -57,13 +57,19 @@ void cp0_instruction_mtc(uint8_t r_target, uint8_t r_dest);
 // The whole instruction set
 void cpu_instruction_lui(uint8_t r_target, uint16_t immediate);
 void cpu_instruction_ori(uint8_t r_source, uint8_t r_target, uint16_t immediate);
+void cpu_instruction_andi(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_or(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
+void cpu_instruction_sltu(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
+void cpu_instruction_addu(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
+
 void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_sh(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sll(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount);
 void cpu_instruction_addi(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_addiu(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_j(uint32_t jump);
+void cpu_instruction_jal(uint32_t jump);
 void cpu_instruction_bne(uint8_t r_source, uint8_t r_target, int16_t immediate);
 
 
@@ -88,8 +94,14 @@ void cpu_execute(uint32_t instruction){
             case 0x00:
                 cpu_instruction_sll(rt, rd, imm5);
                 break;
+            case 0x21:
+                cpu_instruction_addu(rs, rt, rd);
+                break;
             case 0x25:
                 cpu_instruction_or(rt, rd, rs);
+                break;
+            case 0x2b:
+                cpu_instruction_sltu(rs, rt, rd);
                 break;
 
             default:
@@ -106,6 +118,9 @@ void cpu_execute(uint32_t instruction){
             case 0x02:
                 cpu_instruction_j(imm26 << 2);
                 break;
+            case 0x03:
+                cpu_instruction_jal(imm26 << 2);
+                break;
             case 0x05:
                 cpu_instruction_bne(rs, rt, imm16);
                 break;
@@ -115,6 +130,9 @@ void cpu_execute(uint32_t instruction){
             case 0x09:
                 cpu_instruction_addiu(rs, rt, imm16);
                 break;
+            case 0x0C:
+                cpu_instruction_andi(rs, rt, imm16);
+                break;
             case 0x0D:
                 cpu_instruction_ori(rs, rt, imm16);
                 break;
@@ -123,6 +141,9 @@ void cpu_execute(uint32_t instruction){
                 break;
             case 0x23:
                 cpu_instruction_lw(rs, rt, imm16);
+                break;
+            case 0x29:
+                cpu_instruction_sh(rs, rt, imm16);
                 break;
             case 0x2B:
                 cpu_instruction_sw(rs, rt, imm16);
@@ -257,6 +278,18 @@ void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate){
     mm_write(imm + cpu_state->regs[r_source], cpu_state->regs[r_target]);
 }
 
+void cpu_instruction_sh(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    int addr = (immediate << 16 >> 16) + cpu_state->regs[r_source];
+    uint32_t data = mm_read(addr & ~(0x3));
+    if(addr % 4){
+        data = (data & 0xFFFF) | (cpu_state->regs[r_target] << 16);
+    }
+    else{
+        data = (data & 0xFFFF0000) | cpu_state->regs[r_target];
+    }
+    mm_write(addr, data);
+}
+
 // load word : 32 bits loaded from memory to the target register (rt = mem[rs + imm16])
 void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate){
     uint32_t val = mm_read(cpu_state->regs[r_source] + immediate);
@@ -284,6 +317,13 @@ void cpu_instruction_j(uint32_t jump){
     cpu_state->PC_delay = (cpu_state->PC & (0xF0000000)) | jump;
 }
 
+// Jump and link
+// store return address to RA (register 31)
+void cpu_instruction_jal(uint32_t jump){
+    cpu_state->regs[31] = cpu_state->PC;
+    cpu_state->PC_delay = (cpu_state->PC & (0xF0000000)) | jump;
+}
+
 // branch not equal
 void cpu_instruction_bne(uint8_t r_source, uint8_t r_target, int16_t immediate){
     if(cpu_state->regs[r_target] != cpu_state->regs[r_source]){
@@ -301,8 +341,17 @@ void cpu_instruction_ori(uint8_t r_source, uint8_t r_target, uint16_t immediate)
     cpu_state->regs[r_target] = cpu_state->regs[r_source] | immediate;
 }
 
+void cpu_instruction_andi(uint8_t r_source, uint8_t r_target, uint16_t immediate){
+    cpu_state->regs[r_target] = cpu_state->regs[r_source] & immediate;
+}
 
+void cpu_instruction_sltu(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
+    cpu_state->regs[r_dest] = (cpu_state->regs[r_source] < cpu_state->regs[r_target]) ? 1 : 0;
+}
 
+void cpu_instruction_addu(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
+    cpu_state->regs[r_dest] = cpu_state->regs[r_source] + cpu_state->regs[r_target];
+}
 
 /** COPROCESSOR 0 Instructions **/
 // Move to coprocessor 0

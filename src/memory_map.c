@@ -10,6 +10,12 @@
 struct mm_struct{
     uint32_t bios[MM_BIOS_SIZE / 4];
     uint32_t ram[MM_RAM_SIZE / 4];
+
+    // memory control
+    uint32_t bios_rom_size;
+    uint32_t ram_size;
+    uint32_t common_delay;
+    uint32_t cache_control;
 };
 
 typedef struct mm_struct * mm_state_t;
@@ -53,7 +59,10 @@ uint32_t mm_load_bios(const char * path){
 }
 
 uint32_t mm_read(uint32_t addr){
-    if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){
+    if(addr >= 0x00000000 && addr < 0x00000000 + MM_RAM_SIZE){ // KUSEG access
+        return mm_state->ram[(addr - 0x00000000)/ 4];
+    }
+    if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){ // KSEG1 access
         return mm_state->ram[(addr - 0xa0000000)/ 4];
     }
     if(addr >= 0xbfc00000 && addr < 0xbfc00000 + MM_BIOS_SIZE){
@@ -65,11 +74,39 @@ uint32_t mm_read(uint32_t addr){
 
 
 void mm_write(uint32_t addr, uint32_t data){
-    if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){
+    if(addr >= 0x00000000 && addr < 0x00000000 + MM_RAM_SIZE){ // KUSEG
+        mm_state->ram[(addr - 0x00000000)/ 4] = data;
+    }
+    else if(addr >= 0x1f800000 && addr < 0x1f800000 + 0x80000){ // IO map
+        switch (addr){
+            case 0x1f801010:
+                mm_state->bios_rom_size = data;
+                break;
+            case 0x1f801060:
+                mm_state->ram_size = data;
+                break;
+            case 0x1f801020:
+                mm_state->common_delay = data;
+            default:
+                printf("IO write [0x%08x] = 0x%08x not implemented\n", addr, data);
+                break;
+        }
+    }
+    else if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){ // KSEG1
         mm_state->ram[(addr - 0xa0000000)/ 4] = data;
     }
+    else if(addr >= 0xFFFE0000 && addr < 0xFFFE0000 + 512){
+        switch (addr) {
+            case 0xfffe0130:
+                mm_state->cache_control = data;
+                break;
+            default:
+                printf("IO cache control write [0x%08x] = 0x%08x not implemented\n", addr, data);
+                break;
+        }
+    }
     else{
-        //printf("mm_PANIC write [0x%08x] = 0x%08x not implemented\n", addr, data);
+        printf("mm_PANIC write [0x%08x] = 0x%08x not implemented\n", addr, data);
     }
     return;
 }
