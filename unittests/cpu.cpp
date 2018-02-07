@@ -8,7 +8,7 @@ extern "C"
 #include "unistd.h"
 }
 
-uint32_t instruction_assemble(uint8_t op, uint8_t r_target, uint8_t r_source, uint16_t imm16){
+uint32_t instruction_assemble(uint8_t op, uint8_t r_source, uint8_t r_target, uint16_t imm16){
     return (op << 26) | (r_target << 21) | (r_source << 16) | imm16;
 }
 
@@ -127,6 +127,14 @@ TEST(cpu_instruction, mtc0){
     LONGS_EQUAL(0x00010000, cp0_read_reg(12));
 }
 
+TEST(cpu_instruction, mfc0){
+    cp0_write_reg(12, 0x00010000);
+    cpu_execute(0x40026000);
+    CHECK_FALSE(0x00010000 == cpu_read_reg(2));
+    cpu_execute(0x00000000); // nop
+    LONGS_EQUAL(0x00010000, cpu_read_reg(2));
+}
+
 TEST(cpu_instruction, sltu){
     // set on less than unsigned
     // $d = ($s < $t) ? 1 : 0
@@ -145,7 +153,7 @@ TEST(cpu_instruction, sltu){
 
 
 TEST(cpu_instruction, sh){ // store half word
-    uint32_t instr = instruction_assemble(0x29, 1, 2, 0); // mem[$1] = $2
+    uint32_t instr = instruction_assemble(0x29, 2, 1, 0); // mem[$1] = $2
     cpu_write_reg(2, 0xaaaa, CPU_REG_DELAY_OFF); // $s
     cpu_write_reg(1, 100, CPU_REG_DELAY_OFF); // $s
     cpu_execute(instr);
@@ -155,4 +163,27 @@ TEST(cpu_instruction, sh){ // store half word
     cpu_write_reg(1, 102, CPU_REG_DELAY_OFF); // $s
     cpu_execute(instr);
     LONGS_EQUAL(0xbbbbaaaa, mm_read(100));
+}
+
+
+TEST(cpu_instruction, lb){ // load Byte
+    mm_write(0x2040, 0xEFCDAB89);
+    cpu_write_reg(4, 0x00, CPU_REG_DELAY_OFF);
+    cpu_execute(instruction_assemble(0x20, 4, 0xe, 0x2041)); //rs = 0xe, rt = 0x4, imm16 0x2041
+                            // rt = mem[imm + rs]
+
+    LONGS_EQUAL(0x00, cpu_read_reg(4)); // assert load delay
+    cpu_execute(0x34430000);
+    LONGS_EQUAL(0xAB, cpu_read_reg(4));
+}
+
+
+TEST(cpu_instruction, sb){ // store Byte
+    mm_write(0x2040, 0xEFCDAB89);
+    cpu_write_reg(4, 0x56, CPU_REG_DELAY_OFF);
+    cpu_execute(instruction_assemble(0x28, 4, 0xe, 0x2041)); //rs = 0xe, rt = 0x4, imm16 0x2041
+                            // mem[imm + rs] = rt
+    LONGS_EQUAL(0xEFCD5689, mm_read(0x2040));
+    cpu_execute(instruction_assemble(0x28, 4, 0xe, 0x2043));
+    LONGS_EQUAL(0x56CD5689, mm_read(0x2040));
 }
