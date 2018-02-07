@@ -62,6 +62,12 @@ uint32_t mm_read(uint32_t addr){
     if(addr >= 0x00000000 && addr < 0x00000000 + MM_RAM_SIZE){ // KUSEG access
         return mm_state->ram[(addr - 0x00000000)/ 4];
     }
+    if(addr >= 0x1f000000 && addr < 0x1f000000 + 0x100){    // expansion 1
+        return 0xffffffff; // the return value when nothing is connected to the expansion slot
+    }
+	if(addr >= 0x80000000 && addr < 0x80000000 + MM_RAM_SIZE) { // KSEG0 access
+		return mm_state->ram[(addr - 0x80000000) / 4];
+	}
     if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){ // KSEG1 access
         return mm_state->ram[(addr - 0xa0000000)/ 4];
     }
@@ -69,7 +75,7 @@ uint32_t mm_read(uint32_t addr){
         return mm_state->bios[(addr - 0xbfc00000)/ 4];
     }
     printf("mm_PANIC read to 0x%08x not implemented\n", addr);
-    return 0xff;
+    return 0xffffffff;
 }
 
 
@@ -77,7 +83,10 @@ void mm_write(uint32_t addr, uint32_t data){
     if(addr >= 0x00000000 && addr < 0x00000000 + MM_RAM_SIZE){ // KUSEG
         mm_state->ram[(addr - 0x00000000)/ 4] = data;
     }
-    else if(addr >= 0x1f800000 && addr < 0x1f800000 + 0x80000){ // IO map
+    else if(addr >= 0x1f000000 && addr < 0x1f000000 + 0x100){    // expansion 1
+        /*expansion 1 is not connected*/
+    }
+    else if(addr >= 0x1f800100 && addr < 0x1f800000 + 0x80000){ // IO map
         switch (addr){
             case 0x1f801010:
                 mm_state->bios_rom_size = data;
@@ -92,6 +101,9 @@ void mm_write(uint32_t addr, uint32_t data){
                 break;
         }
     }
+	else if (addr >= 0x80000000 && addr < 0x80000000 + MM_RAM_SIZE) { // KSEG0
+		mm_state->ram[(addr - 0x80000000) / 4] = data;
+	}
     else if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){ // KSEG1
         mm_state->ram[(addr - 0xa0000000)/ 4] = data;
     }
