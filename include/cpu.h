@@ -14,9 +14,9 @@
 uint32_t cpu_initialise(void);
 uint32_t cpu_desinit(void);
 
-void cpu_execute(uint32_t instruction);
+uint32_t cpu_execute(uint32_t instruction);
 
-void cpu_run(uint32_t nb_cycles);
+uint32_t cpu_run(uint32_t nb_cycles);
 uint32_t cpu_read_reg(uint8_t reg);
 
 uint32_t cp0_read_reg(uint8_t reg);

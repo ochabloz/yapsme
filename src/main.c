@@ -30,8 +30,11 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     cpu_initialise();
-    for (size_t i = 0; i < 1700; i++) {
-        cpu_run(0);
+    for (int i = 0; i < 10000; i++) {
+        if(cpu_run(0) == CPU_FAILURE){
+            printf("cpu ran for %d cycles\n", i);
+            break;
+        }
     }
     return 0;
 }
