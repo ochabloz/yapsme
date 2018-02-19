@@ -16,6 +16,7 @@ struct mm_struct{
     uint32_t ram_size;
     uint32_t common_delay;
     uint32_t cache_control;
+    uint32_t cache_isolated;
 };
 
 typedef struct mm_struct * mm_state_t;
@@ -78,10 +79,32 @@ uint32_t mm_read(uint32_t addr){
     return 0xffffffff;
 }
 
+void cache(uint32_t addr, uint32_t instruction){
+    //printf("cache write !\n");
+    return;
+}
+
+
+void mm_set_status(uint32_t status_name, uint32_t status){
+    switch (status_name) {
+        case MM_S_ISOLATE_CACHE:
+            mm_state->cache_isolated = status ? 1 : 0;
+            //printf("cache is %s isolated !\n", status ? "" : "NOT");
+            break;
+        default:
+            break;
+    }
+}
+
 
 void mm_write(uint32_t addr, uint32_t data){
     if(addr >= 0x00000000 && addr < 0x00000000 + MM_RAM_SIZE){ // KUSEG
-        mm_state->ram[(addr - 0x00000000)/ 4] = data;
+        if((mm_state->cache_isolated) && addr < 0x1000){ // code cache enabled. discard writes
+            cache(addr, data);
+        }
+        else{
+            mm_state->ram[(addr - 0x00000000)/ 4] = data;
+        }
     }
     else if(addr >= 0x1f000000 && addr < 0x1f000000 + 0x100){    // expansion 1
         /*expansion 1 is not connected*/

@@ -107,18 +107,51 @@ TEST(cpu_instruction, jump){
     LONGS_EQUAL(0xbfc00150, cpu_read_reg(CPU_PC));
 }
 
+TEST(cpu_instruction, jalr){ // jump and link register
+    cpu_write_reg(8, 0x0000aaa, CPU_REG_DELAY_OFF);
+    cpu_execute(0x0100f809); // jalr $31, $8
+    LONGS_EQUAL(0xbfc00004, cpu_read_reg(CPU_PC)); // jump is not applied directely
+    LONGS_EQUAL(0xbfc00004, cpu_read_reg(31)); // jump is not applied directely
+    cpu_execute(0x00000000); // nop
+    LONGS_EQUAL(0x0000aaa, cpu_read_reg(CPU_PC));
+}
+
 TEST(cpu_instruction, bne){
     cpu_write_reg(10, 0, CPU_REG_DELAY_OFF);
     cpu_write_reg(11, 1, CPU_REG_DELAY_OFF);
     cpu_execute(0x154bfff7); // BNE $10, $11, -36
     cpu_execute(0x00000000); // nop
-    LONGS_EQUAL(0xbfc00000 -36, cpu_read_reg(CPU_PC)); // branching must occurs since 0 != 1
+    LONGS_EQUAL(0xbfc00000 -32, cpu_read_reg(CPU_PC)); // branching must occurs since 0 != 1
 
     cpu_write_reg(10, 1, CPU_REG_DELAY_OFF);
     cpu_write_reg(CPU_PC, 0xbfc00000, CPU_REG_DELAY_OFF); // revert to default
     cpu_execute(0x154bfff7); // BNE $10, $11, -36
     cpu_execute(0x00000000); // nop
     LONGS_EQUAL(0xbfc00008 , cpu_read_reg(CPU_PC)); // branching must not occurs
+}
+
+TEST(cpu_instruction, bgtz){
+    cpu_write_reg(5, -10, CPU_REG_DELAY_OFF);
+    cpu_execute(0x1ca00003); // bgtz $5, +12
+    cpu_execute(0x00000000); // nop
+    LONGS_EQUAL(0xbfc00008, cpu_read_reg(CPU_PC));
+
+    cpu_write_reg(5, 10, CPU_REG_DELAY_OFF);
+    cpu_execute(0x1ca00003); // bgtz $5, +12
+    cpu_execute(0x00000000); // nop
+    LONGS_EQUAL(0xbfc0000c + 12, cpu_read_reg(CPU_PC));
+}
+
+TEST(cpu_instruction, blez){
+    cpu_write_reg(5, 10, CPU_REG_DELAY_OFF);
+    cpu_execute(0x18a00005); // blez $5, +20
+    cpu_execute(0x00000000); // nop
+    LONGS_EQUAL(0xbfc00008, cpu_read_reg(CPU_PC));
+
+    cpu_write_reg(5, -10, CPU_REG_DELAY_OFF);
+    cpu_execute(0x18a00005); // blez $5, +20
+    cpu_execute(0x00000000); // nop
+    LONGS_EQUAL(0xbfc0000c + 20, cpu_read_reg(CPU_PC));
 }
 
 TEST(cpu_instruction, mtc0){
@@ -149,6 +182,11 @@ TEST(cpu_instruction, sltu){
     cpu_write_reg(3, 0x00030000, CPU_REG_DELAY_OFF); // $t
     cpu_execute(0x0043082b);
     LONGS_EQUAL(0, cpu_read_reg(1));
+
+    cpu_write_reg(2, 0x80000000, CPU_REG_DELAY_OFF); // $s
+    cpu_write_reg(3, 0x00000001, CPU_REG_DELAY_OFF); // $t
+    cpu_execute(0x0043082b);
+    LONGS_EQUAL(0, cpu_read_reg(1));
 }
 
 
@@ -174,7 +212,7 @@ TEST(cpu_instruction, lb){ // load Byte
 
     LONGS_EQUAL(0x00, cpu_read_reg(4)); // assert load delay
     cpu_execute(0x34430000);
-    LONGS_EQUAL(0xAB, cpu_read_reg(4));
+    LONGS_EQUAL(0xffffffab, cpu_read_reg(4));
 }
 
 

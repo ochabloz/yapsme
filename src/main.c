@@ -21,6 +21,7 @@ int main(int argc, char const *argv[]) {
             sprintf(filepath, "bios/%s", bios_file->d_name);
             if(mm_load_bios(filepath) == MM_SUCCESS){
                 bios_loaded = 1;
+                printf("BIOS file %s loaded.\n",bios_file->d_name);
                 break;
             }
         }
@@ -30,8 +31,8 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     cpu_initialise();
-    for (int i = 0; i < 10000; i++) {
-        if(cpu_run(0) == CPU_FAILURE){
+    for (int i = 0; i < 955000; i++) {
+        if(cpu_run(i) == CPU_FAILURE){
             printf("cpu ran for %d cycles\n", i);
             break;
         }
