@@ -1,6 +1,7 @@
 
 #include "cpu.h"
 #include "memory_map.h"
+#include "spu.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +16,7 @@ int main(int argc, char const *argv[]) {
     }
     int bios_loaded = 0;
     mm_initialise();
+    spu_init();
     while ((bios_file = readdir(bios_dir)) != NULL) {
         char filepath[85];
         if(strlen(bios_file->d_name) <= 80){
@@ -31,8 +33,9 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     cpu_initialise();
-    for (int i = 0; i < 955000; i++) {
-        if(cpu_run(i) == CPU_FAILURE){
+    uint32_t i = 0;
+    while(1){
+        if(cpu_run(i++) == CPU_FAILURE){
             printf("cpu ran for %d cycles\n", i);
             break;
         }

@@ -36,6 +36,7 @@ TEST(cpu, initialisation){
     LONGS_EQUAL(0xbfc00000, rep); // this is the PC default value
 }
 
+
 TEST(cpu, read_write_register){
     cpu_write_reg(9, 10, CPU_REG_DELAY_OFF);
     LONGS_EQUAL(10, cpu_read_reg(9));

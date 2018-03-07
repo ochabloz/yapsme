@@ -15,8 +15,9 @@ struct cpu_struct {
     uint32_t regs [32];
     uint32_t PC;
     uint32_t HI;
-    uint32_t LOW;
+    uint32_t LO;
     uint32_t PC_delay;
+    uint8_t  Branch_delay; // 1 when executing an instruction during a branch delay slot. Else 0
 
     uint8_t  R_delay_reg;  // register delay slot
     uint32_t R_delay_dat;
@@ -34,12 +35,13 @@ uint32_t cpu_initialise(void){
     if (cpu_state == NULL) {
         cpu_state = malloc(sizeof(struct cpu_struct));
         cpu_state->PC = 0xbfc00000;
-        cpu_state->PC_delay = 0;
+        cpu_state->PC_delay = ~0;
         cpu_state->regs[0x00] = 0;
         cpu_state->R_delay_flag = CPU_REG_DELAY__NO_DATA_AVAILABLE;
-        return MM_SUCCESS;
+        cpu_state->Branch_delay = 0;
+        return CPU_SUCCESS;
     }
-    return MM_FAILURE;
+    return CPU_FAILURE;
 }
 
 uint32_t cpu_desinit(void){
@@ -50,39 +52,80 @@ uint32_t cpu_desinit(void){
     cpu_state = NULL;
     return CPU_SUCCESS;
 }
+
+enum exception{
+    addr_error_load = 0x04,
+    addr_error_store,
+    bus_error_instr_fetch,
+    bus_error_data_ls,
+    system_call,
+    breakpoint,
+    reserved_instr,
+    coprocessor_unusable,
+    math_overflow
+};
+typedef enum exception exception_t;
+void cpu_trigger_exception(exception_t cause);
+
+
+
 void print_disassemble(uint32_t instruction);
 
 uint32_t cpu_run(uint32_t nb_cycles){
-    uint32_t fetch = mm_read(cpu_state->PC);
-    if (nb_cycles > ~0){ // 71500
-        print_disassemble(fetch);
+    if(cpu_state->PC % 4){
+        cpu_trigger_exception(bus_error_instr_fetch);
+        return CPU_SUCCESS;
     }
-    return cpu_execute(fetch);
-
+    else{
+        uint32_t fetch = mm_read(cpu_state->PC);
+        if (nb_cycles > 12803155){ // 2857421
+            print_disassemble(fetch);
+        }
+        return cpu_execute(fetch);
+    }
 }
 
 
 uint32_t cp0_execute(uint32_t instruction);
 void cp0_instruction_mtc(uint8_t r_target, uint8_t r_dest);
 void cp0_instruction_mfc(uint8_t r_target, uint8_t r_dest);
+void cp0_instruction_rfe(uint8_t compl_opcode);
 
 // The whole instruction set
+void cpu_instruction_syscall(void);
 void cpu_instruction_lui(uint8_t r_target, uint16_t immediate);
 void cpu_instruction_ori(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_andi(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_or(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
+void cpu_instruction_nor(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
 void cpu_instruction_and(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
 void cpu_instruction_sltu(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
+void cpu_instruction_slt(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
+void cpu_instruction_slti(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_sltiu(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_addu(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
+void cpu_instruction_subu(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
 void cpu_instruction_add(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
+
+void cpu_instruction_div(uint8_t r_source, uint8_t r_target);
+void cpu_instruction_divu(uint8_t r_source, uint8_t r_target);
+void cpu_instruction_mflo(uint8_t r_dest);
+void cpu_instruction_mtlo(uint8_t r_source);
+void cpu_instruction_mfhi(uint8_t r_dest);
+void cpu_instruction_mthi(uint8_t r_source);
 
 void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sh(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sb(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_lhu(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_lh(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lb(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lbu(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sll(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount);
+void cpu_instruction_sllv(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
+void cpu_instruction_sra(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount);
+void cpu_instruction_srl(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount);
 void cpu_instruction_addi(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_addiu(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_j(uint32_t jump);
@@ -100,8 +143,15 @@ void cpu_instruction_blez(uint8_t r_source, int16_t immediate);
 uint32_t cpu_execute(uint32_t instruction){
 
     // When a jump or a branch occurs, the next instruction is exectuted, then the jump occurs
-    cpu_state->PC = (cpu_state->PC_delay) ? cpu_state->PC_delay : cpu_state->PC +4;
-    cpu_state->PC_delay = 0;
+    if(cpu_state->PC_delay != ~0x00){
+        cpu_state->PC = cpu_state->PC_delay;
+        cpu_state->Branch_delay = 1;
+        cpu_state->PC_delay = ~0x00;
+    }
+    else{
+        cpu_state->PC += 4;
+        cpu_state->Branch_delay = 0;
+    }
 
     // instruction decoding :
     uint8_t opcode = instruction >> 26;
@@ -119,17 +169,50 @@ uint32_t cpu_execute(uint32_t instruction){
             case 0x00:
                 cpu_instruction_sll(rt, rd, imm5);
                 break;
+            case 0x02:
+                cpu_instruction_srl(rt, rd, imm5);
+                break;
+            case 0x03:
+                cpu_instruction_sra(rt, rd, imm5);
+                break;
+            case 0x04:
+                cpu_instruction_sllv(rt, rd, rs);
+                break;
             case 0x08:
                 cpu_instruction_jr(rs);
                 break;
             case 0x09:
                 cpu_instruction_jalr(rs, rd);
                 break;
+            case 0x0c:
+                cpu_instruction_syscall();
+                break;
+            case 0x10:
+                cpu_instruction_mfhi(rd);
+                break;
+            case 0x11:
+                cpu_instruction_mthi(rs);
+                break;
+            case 0x12:
+                cpu_instruction_mflo(rd);
+                break;
+            case 0x13:
+                cpu_instruction_mtlo(rs);
+                break;
+            case 0x1a:
+                cpu_instruction_div(rs, rt);
+                break;
+            case 0x1b:
+                cpu_instruction_divu(rs, rt);
+                break;
             case 0x20:
                 cpu_instruction_add(rs, rt, rd);
                 break;
             case 0x21:
                 cpu_instruction_addu(rs, rt, rd);
+                break;
+            case 0x23:
+                cpu_instruction_subu(rs, rt, rd);
                 break;
             case 0x24:
                 cpu_instruction_and(rt, rd, rs);
@@ -138,15 +221,24 @@ uint32_t cpu_execute(uint32_t instruction){
             case 0x25:
                 cpu_instruction_or(rt, rd, rs);
                 break;
+            case 0x27:
+                cpu_instruction_nor(rt, rd, rs);
+                printf("PC : 0x%08x, instruction: 0x%08x\n", cpu_state->PC, instruction);
+                break;
+            case 0x2a:
+                cpu_instruction_slt(rs, rt, rd);
+                break;
             case 0x2b:
                 cpu_instruction_sltu(rs, rt, rd);
                 break;
 
             default:
             {
-                printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",instruction, cpu_state->PC);
-                printf("OP 0x%02x, rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, sec_op 0x%02x\n",
-                opcode, rs, rt, rd, imm5, instruction & 0x3F);
+                printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",
+                                                                    instruction, cpu_state->PC);
+                printf("OP 0x%02x, ", opcode);
+                printf("rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, sec_op 0x%02x\n",
+                rs, rt, rd, imm5, instruction & 0x3F);
                 return_status = CPU_FAILURE;
                 break;
             }
@@ -181,6 +273,12 @@ uint32_t cpu_execute(uint32_t instruction){
             case 0x09:
                 cpu_instruction_addiu(rs, rt, imm16);
                 break;
+            case 0x0A:
+                cpu_instruction_slti(rs, rt, imm16);
+                break;
+            case 0x0B:
+                cpu_instruction_sltiu(rs, rt, imm16);
+                break;
             case 0x0C:
                 cpu_instruction_andi(rs, rt, imm16);
                 break;
@@ -193,11 +291,17 @@ uint32_t cpu_execute(uint32_t instruction){
             case 0x20:
                 cpu_instruction_lb(rs, rt, imm16);
                 break;
+            case 0x21:
+                cpu_instruction_lhu(rs, rt, imm16);
+                break;
             case 0x23:
                 cpu_instruction_lw(rs, rt, imm16);
                 break;
             case 0x24:
                 cpu_instruction_lbu(rs, rt, imm16);
+                break;
+            case 0x25:
+                cpu_instruction_lhu(rs, rt, imm16);
                 break;
             case 0x28:
                 cpu_instruction_sb(rs, rt, imm16);
@@ -218,18 +322,22 @@ uint32_t cpu_execute(uint32_t instruction){
                             return_status = cp0_execute(instruction);
                             break;
                         default:
-                        printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",instruction, cpu_state->PC);
-                        printf("OP 0x%02x, rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, imm16 0x%04x\n",
-                        opcode, rs, rt, rd, imm5, imm16);
+                        printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",
+                                                                    instruction, cpu_state->PC);
+                        printf("OP 0x%02x, ", opcode);
+                        printf("rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, imm16 0x%04x\n",
+                        rs, rt, rd, imm5, imm16);
                             return_status = CPU_FAILURE;
                             break;
                     }
 
                 }
                 else{
-                    printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",instruction, cpu_state->PC);
-                    printf("OP 0x%02x, rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, imm16 0x%04x\n",
-                    opcode, rs, rt, rd, imm5, imm16);
+                    printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",
+                    instruction, cpu_state->PC);
+                    printf("OP 0x%02x, ", opcode);
+                    printf("rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, imm16 0x%04x\n",
+                    rs, rt, rd, imm5, imm16);
                     return_status = CPU_FAILURE;
                 }
             }
@@ -263,6 +371,7 @@ uint32_t cp0_execute(uint32_t instruction){
     uint8_t cp0_opcode = instruction >> 21;
     uint8_t rt = (instruction >> 16) & 0x1F;
     uint8_t rd = (instruction >> 11) & 0x1F;
+    uint8_t compl_opcode = instruction & 0x3F;
     uint32_t return_status = CPU_SUCCESS;
 
     switch (cp0_opcode) {
@@ -272,10 +381,15 @@ uint32_t cp0_execute(uint32_t instruction){
         case 0x04:
             cp0_instruction_mtc(rt, rd);
             break;
+        case 0x10:
+            cp0_instruction_rfe(compl_opcode);
+            break;
         default:
-            printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",instruction, cpu_state->PC);
-            printf("CP0 0x%02x instruction not defined rt(0x%02x), rd(0x%02x) compl_opcode(0x%02x)\n",
-                    cp0_opcode, rt, rd, instruction & 0x3F);
+            printf("instruction 0x%08x not implemented at PC = 0x%08x!!\n",
+                                                            instruction, cpu_state->PC);
+            printf("CP0 0x%02x instruction not defined ", cp0_opcode);
+            printf("rt(0x%02x), rd(0x%02x) compl_opcode(0x%02x)\n",
+                    rt, rd, compl_opcode);
             return_status = CPU_FAILURE;
             break;
     }
@@ -293,7 +407,7 @@ uint32_t cpu_read_reg(uint8_t reg){
         return cpu_state->HI;
     }
     if(reg == CPU_LO){
-        return cpu_state->LOW;
+        return cpu_state->LO;
     }
     return 0xFF;
 }
@@ -323,7 +437,7 @@ void cpu_write_reg(uint8_t reg, uint32_t val, uint8_t delay){
         cpu_state->HI = val;
     }
     else if(reg == CPU_LO){
-        cpu_state->LOW = val;
+        cpu_state->LO = val;
     }
     else{
         printf("ERROR :: Forbidden register write. PC @ 0x%08x\n", cpu_state->PC);
@@ -346,7 +460,33 @@ void cp0_write_reg(uint8_t reg, uint32_t val){
     }
 }
 
+void cpu_trigger_exception(exception_t cause){
+    // the jump address depends on the BEV field of the (sr) cop0_12 register (bit 22)
+    uint32_t jump_address = (cpu_state->cp0_regs[12] & (0x1 << 22)) ? 0xbfc00180 : 0x80000080;
+
+    uint8_t mode = cpu_state->cp0_regs[12] & 0x3f;
+    cpu_state->cp0_regs[12] &= ~0x3f; // clear mode
+    cpu_state->cp0_regs[12] |= (mode << 2) & 0x3f;
+
+    // CAUSE register
+    cpu_state->cp0_regs[13] = cause << 2;
+
+    // EPC (exception program counter) register
+    cpu_state->cp0_regs[14] = cpu_state->PC;
+    cpu_state->PC = jump_address;
+
+    if(cpu_state->Branch_delay){
+        cpu_state->cp0_regs[13] |= 0x1 << 31;
+        // the exception has occured during a branch delai. must compare execution flow with actual
+        // hardware or emulator
+        printf("Exception occured during branch delai!!! at PC 0x%08x\n",cpu_state->cp0_regs[14]);
+    }
+}
+
 /** CPU Instructions **/
+void cpu_instruction_syscall(void){
+    cpu_trigger_exception(system_call);
+}
 
 // load 16bits to the upper part of the target register
 void cpu_instruction_lui(uint8_t r_target, uint16_t immediate){
@@ -355,11 +495,20 @@ void cpu_instruction_lui(uint8_t r_target, uint16_t immediate){
 
 // Store Word signed
 void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate){
-    mm_write(cpu_state->regs[r_source] + immediate, cpu_state->regs[r_target]);
+    uint32_t addr = immediate + cpu_state->regs[r_source];
+    if(addr %4){
+        cpu_trigger_exception(addr_error_store);
+        return;
+    }
+    mm_write(addr, cpu_state->regs[r_target]);
 }
 
 void cpu_instruction_sh(uint8_t r_source, uint8_t r_target, int16_t immediate){
-    int addr = immediate + cpu_state->regs[r_source];
+    uint32_t addr = immediate + cpu_state->regs[r_source];
+    if(addr %2){
+        cpu_trigger_exception(addr_error_store);
+        return;
+    }
     uint32_t data = mm_read(addr & ~(0x3));
     if(addr % 4){
         data = (data & 0xFFFF) | (cpu_state->regs[r_target] << 16);
@@ -380,8 +529,35 @@ void cpu_instruction_sb(uint8_t r_source, uint8_t r_target, int16_t immediate){
 
 // load word : 32 bits loaded from memory to the target register (rt = mem[rs + imm16])
 void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate){
-    uint32_t val = mm_read(cpu_state->regs[r_source] + immediate);
+    uint32_t addr = cpu_state->regs[r_source] + immediate;
+    if(addr %4){
+        cpu_trigger_exception(addr_error_load);
+        return;
+    }
+    uint32_t val = mm_read(addr);
     cpu_write_reg(r_target, val, CPU_REG_DELAY_ON);
+}
+
+// load half word unsigned. The 2 MSB are filled with 0's
+void cpu_instruction_lhu(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t addr = cpu_state->regs[r_source] + immediate;
+    if(addr %2){
+        cpu_trigger_exception(addr_error_load);
+        return;
+    }
+    uint32_t val = (mm_read(addr & ~0x3) >> (addr %4)) & 0xFF;
+    cpu_write_reg(r_target, val, CPU_REG_DELAY_ON);
+}
+
+// load half word signed. The 2 MSB are filled with 1's
+void cpu_instruction_lh(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t addr = cpu_state->regs[r_source] + immediate;
+    if(addr %2){
+        cpu_trigger_exception(addr_error_load);
+        return;
+    }
+    int32_t val = (mm_read(addr & ~0x3) >> (addr %4)) & 0xFF;
+    cpu_write_reg(r_target, (val<< 16)>>16, CPU_REG_DELAY_ON);
 }
 
 // load Byte
@@ -403,6 +579,23 @@ void cpu_instruction_sll(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount)
     cpu_state->regs[r_dest] = cpu_state->regs[r_target] << shift_amount;
 }
 
+// shift logical left variable. The shift amount is stored in a register.
+void cpu_instruction_sllv(uint8_t r_target, uint8_t r_dest, uint8_t r_source){
+    // mips keeps only the 5 LSb for the shift amount
+    cpu_state->regs[r_dest] = cpu_state->regs[r_target] <<  (cpu_state->regs[r_source] & 0x1f);
+}
+
+// shift logical right
+void cpu_instruction_srl(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount){
+    cpu_state->regs[r_dest] = cpu_state->regs[r_target] >> shift_amount;
+}
+
+// shift right arithmetic
+void cpu_instruction_sra(uint8_t r_target, uint8_t r_dest, uint8_t shift_amount){
+    int32_t val = cpu_state->regs[r_target]; // register is casted to be signed
+    cpu_state->regs[r_dest] = val >> shift_amount;
+}
+
 // add immediate unsigned
 void cpu_instruction_addiu(uint8_t r_source, uint8_t r_target, int16_t immediate){
     cpu_state->regs[r_target] = cpu_state->regs[r_source] + immediate;
@@ -410,8 +603,16 @@ void cpu_instruction_addiu(uint8_t r_source, uint8_t r_target, int16_t immediate
 
 // add immediate signed
 void cpu_instruction_addi(uint8_t r_source, uint8_t r_target, int16_t immediate){
-    cpu_state->regs[r_target] = cpu_state->regs[r_source] + immediate;
-    // NOTE : ADD overflow
+    int32_t s = cpu_state->regs[r_source];
+    int16_t i = immediate;
+    int32_t r = cpu_state->regs[r_source] + immediate;
+    cpu_state->regs[r_target] = r;
+    if(s < 0 && i < 0 && r >= 0){
+        cpu_trigger_exception(math_overflow);
+    }
+    else if(s > 0 && i > 0 && r <= 0){
+        cpu_trigger_exception(math_overflow);
+    }
 }
 
 // Jump
@@ -473,10 +674,10 @@ void cpu_instruction_bxx(uint8_t r_source, uint8_t r_target, int16_t immediate){
     // LSb == 1 : branch if Greater or equal than 0
     // LSb == 0 : branch if lower than 0
     if(r_target & 0x1){
-        cpu_state->PC_delay = (test >= 0) ? branch : 0;
+        cpu_state->PC_delay = (test >= 0) ? branch : ~0;
     }
     else{
-        cpu_state->PC_delay = (test < 0) ? branch : 0;
+        cpu_state->PC_delay = (test < 0) ? branch : ~0;
     }
     // MSb == 1 : And link to
     if(r_target & 0x10){ // pc is stored to RA even if no branching
@@ -487,6 +688,11 @@ void cpu_instruction_bxx(uint8_t r_source, uint8_t r_target, int16_t immediate){
 // OR
 void cpu_instruction_or(uint8_t r_target, uint8_t r_dest, uint8_t r_source){
     cpu_state->regs[r_dest] = cpu_state->regs[r_source] | cpu_state->regs[r_target];
+}
+
+// NOR
+void cpu_instruction_nor(uint8_t r_target, uint8_t r_dest, uint8_t r_source){
+    cpu_state->regs[r_dest] = ~(cpu_state->regs[r_source] | cpu_state->regs[r_target]);
 }
 
 // AND
@@ -502,21 +708,94 @@ void cpu_instruction_andi(uint8_t r_source, uint8_t r_target, uint16_t immediate
     cpu_state->regs[r_target] = cpu_state->regs[r_source] & immediate;
 }
 
+// set if lower than (signed)
+void cpu_instruction_slt(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
+    int32_t test = cpu_state->regs[r_source];
+    cpu_state->regs[r_dest] = (test < ((int32_t)cpu_state->regs[r_target])) ? 1 : 0;
+}
+
+// set if lower than (unsigned)
 void cpu_instruction_sltu(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
     cpu_state->regs[r_dest] = (cpu_state->regs[r_source] < cpu_state->regs[r_target]) ? 1 : 0;
+}
+
+// set if lower than immediate (signed)
+void cpu_instruction_slti(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    cpu_state->regs[r_target] = (((int32_t)cpu_state->regs[r_source]) < immediate) ? 1 : 0;
+}
+
+// set if lower than immediate (unsigned)
+void cpu_instruction_sltiu(uint8_t r_source, uint8_t r_target, uint16_t immediate){
+    cpu_state->regs[r_target] = (cpu_state->regs[r_source] < immediate) ? 1 : 0;
 }
 
 void cpu_instruction_addu(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
     cpu_state->regs[r_dest] = cpu_state->regs[r_source] + cpu_state->regs[r_target];
 }
 
+void cpu_instruction_subu(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
+    cpu_state->regs[r_dest] = cpu_state->regs[r_source] - cpu_state->regs[r_target];
+}
+
 void cpu_instruction_add(uint8_t r_source, uint8_t r_target, uint8_t r_dest){
-    uint32_t r_tmp = cpu_state->regs[r_source];
-    cpu_state->regs[r_dest] = cpu_state->regs[r_source] + cpu_state->regs[r_target];
-    if(r_tmp > cpu_state->regs[r_dest]){
-        printf("implement overflow!\n");
+    int32_t s = cpu_state->regs[r_source];
+    int16_t t =  cpu_state->regs[r_target];
+    int32_t r = s + t;
+    cpu_state->regs[r_dest] = r;
+    if(s < 0 && t < 0 && r >= 0){
+        cpu_trigger_exception(math_overflow);
+    }
+    else if(s > 0 && t > 0 && r <= 0){
+        cpu_trigger_exception(math_overflow);
     }
 }
+
+
+void cpu_instruction_div(uint8_t r_source, uint8_t r_target){
+    int32_t numerator = cpu_state->regs[r_source];
+    int32_t denominator = cpu_state->regs[r_target];
+    if(denominator == 0){ // division by 0 will give bogus results
+        cpu_state->LO = (numerator >= 0) ? -1 : 1;
+    }
+    else if (numerator == 0x80000000 && denominator == 0xffffffff){
+        cpu_state->LO = 0x80000000; // another special case
+        cpu_state->HI = 0;
+    }
+    else{
+        cpu_state->LO = numerator / denominator;
+        cpu_state->HI = numerator % denominator;
+    }
+}
+
+void cpu_instruction_divu(uint8_t r_source, uint8_t r_target){
+    uint32_t numerator = cpu_state->regs[r_source];
+    uint32_t denominator = cpu_state->regs[r_target];
+    if(denominator == 0){ // division by 0 will give bogus results
+        cpu_state->LO = 0xffffffff; // another special case
+        cpu_state->HI = numerator;
+    }
+    else{
+        cpu_state->LO = numerator / denominator;
+        cpu_state->HI = numerator % denominator;
+    }
+}
+
+void cpu_instruction_mflo(uint8_t r_dest){
+    cpu_state->regs[r_dest] = cpu_state->LO;
+}
+
+void cpu_instruction_mfhi(uint8_t r_dest){
+    cpu_state->regs[r_dest] = cpu_state->HI;
+}
+
+void cpu_instruction_mtlo(uint8_t r_source){
+    cpu_state->LO = cpu_state->regs[r_source];
+}
+
+void cpu_instruction_mthi(uint8_t r_source){
+    cpu_state->HI = cpu_state->regs[r_source];
+}
+
 
 /** COPROCESSOR 0 Instructions **/
 // Move to coprocessor 0
@@ -529,6 +808,16 @@ void cp0_instruction_mfc(uint8_t r_target, uint8_t r_dest){
     cpu_write_reg(r_target, cpu_state->cp0_regs[r_dest], CPU_REG_DELAY_ON);
 }
 
+void cp0_instruction_rfe(uint8_t compl_opcode){
+    if(compl_opcode != 0x10){
+        printf("RFE instruction with compl_opcode 0x%02x is not implemented!!\n", compl_opcode);
+        // NOTE: trigger exception..
+    }
+
+    uint8_t mode = cpu_state->cp0_regs[12] & 0x3f;
+    cpu_state->cp0_regs[12] &= ~0x3f; // clear mode
+    cpu_state->cp0_regs[12] |= (mode >> 2) & 0x3f;
+}
 
 
 
@@ -565,35 +854,53 @@ void print_disassemble(uint32_t instruction){
         switch (opcode) {
             case 0x04:
             case 0x05:
-                printf("%s $%d, $%d, 0x%08x\n", (opcode == 4) ? "beq" : "bne",rt, rs, cpu_state->PC + 4 + (((int16_t)imm16) << 2));
+                printf("%s $%d, $%d, 0x%08x\n", (opcode == 4) ? "beq" : "bne",
+                                            rt, rs, cpu_state->PC + 4 + (((int16_t)imm16) << 2));
                 break;
             case 0x02:
             case 0x03:
-                printf("%s, 0x%08x\n", (opcode == 2) ? "j" : "jal",(cpu_state->PC & 0xF0000000) | imm26 << 2);
+                printf("%s, 0x%08x\n", (opcode == 2) ? "j" : "jal",
+                                                    (cpu_state->PC & 0xF0000000) | imm26 << 2);
+                break;
+            case 0x07:
+                printf("bgtz $%d, %d            # 0x%08x\n",rs, (int16_t)imm16<<2,
+                                                    cpu_state->PC + (imm16<<2));
                 break;
             case 0x08:
             case 0x09:
-                printf("%s $%d, $%d, %d        # 0x%08x + 0x%04x\n", (opcode == 8) ? "addi" : "addiu" , rs, rt, (int16_t)imm16, cpu_state->regs[rs], imm16);
+                printf("%s $%d, $%d, %d        # 0x%08x + 0x%04x\n",
+                                        (opcode == 8) ? "addi" : "addiu" , rs, rt,
+                                        (int16_t)imm16, cpu_state->regs[rs], imm16);
                 break;
             case 0x0d:
-                printf("ori, $%d, $%d,  0x%04x        # 0x%08x | 0x%04x\n", rs, rt, imm16, cpu_state->regs[rs], imm16);
+                printf("ori, $%d, $%d,  0x%04x    # 0x%08x | 0x%04x\n", rs, rt, imm16,
+                                                    cpu_state->regs[rs], imm16);
+                break;
+            case 0x24:
+                printf("lbu, $%d, [$%d + %d]      #0x%08x = [0x%08x]\n",rt, rs,(int16_t)imm16<<2,
+                                            cpu_state->regs[rt], cpu_state->regs[rs] + (imm16<<2));
+                break;
+            case 0x28:
+                printf("sb [$%d + %d], $%d        #[0x%08x] = 0x%08x\n", rs,(int16_t)imm16<<2,
+                                        rt, cpu_state->regs[rs] + (imm16<<2), cpu_state->regs[rt]);
                 break;
             case 0x0c:
             case 0x20:
             case 0x23:
-            case 0x28:
             case 0x29:
-                printf("OP 0x%02x, rs 0x%02x, rt 0x%02x, imm16 %d\n", opcode, rs, rt, (int16_t)imm16);
+                printf("OP 0x%02x, rs 0x%02x, rt 0x%02x, imm16 %d\n",opcode,rs, rt,(int16_t)imm16);
                 break;
             case 0x2b:
-                printf("sw [$%d + 0x%04x], $%d    # 0x%08x = 0x%08x\n",rs, imm16, rt, cpu_state->regs[rs] + (int16_t)imm16, cpu_state->regs[rt]);
+                printf("sw [$%d + 0x%04x], $%d    # 0x%08x = 0x%08x\n",rs, imm16, rt,
+                                        cpu_state->regs[rs] + (int16_t)imm16, cpu_state->regs[rt]);
                 break;
             case 0x0f:
                 printf("lui $%d, 0x%04x        # 0x%08x\n", rt, imm16, imm16 << 16);
                 break;
             default:
-                printf("OP 0x%02x, rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, imm16 0x%04x\n",
-                opcode, rs, rt, rd, imm5, imm16);
+                printf("OP 0x%02x, ", opcode);
+                printf("rs  0x%02x, rt  0x%02x, rd  0x%02x, imm5  0x%02x, imm16 0x%04x\n",
+                rs, rt, rd, imm5, imm16);
                 break;
         }
     }

@@ -1,5 +1,6 @@
 
 #include "memory_map.h"
+#include "spu.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -66,6 +67,9 @@ uint32_t mm_read(uint32_t addr){
     if(addr >= 0x1f000000 && addr < 0x1f000000 + 0x100){    // expansion 1
         return 0xffffffff; // the return value when nothing is connected to the expansion slot
     }
+    if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
+        return spu_register_read(addr - 0x1f801C00);
+    }
 	if(addr >= 0x80000000 && addr < 0x80000000 + MM_RAM_SIZE) { // KSEG0 access
 		return mm_state->ram[(addr - 0x80000000) / 4];
 	}
@@ -119,9 +123,16 @@ void mm_write(uint32_t addr, uint32_t data){
                 break;
             case 0x1f801020:
                 mm_state->common_delay = data;
-            default:
-                printf("IO write [0x%08x] = 0x%08x not implemented\n", addr, data);
                 break;
+            default:
+            {
+                if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
+                    spu_register_write(addr - 0x1f801C00, data);
+                }else{
+                    printf("IO write [0x%08x] = 0x%08x not implemented\n", addr, data);
+                }
+            }
+            break;
         }
     }
 	else if (addr >= 0x80000000 && addr < 0x80000000 + MM_RAM_SIZE) { // KSEG0
