@@ -27,6 +27,7 @@ mm_state_t mm_state = NULL;
 uint32_t mm_initialise(void){
     if (mm_state == NULL) {
         mm_state = malloc(sizeof(struct mm_struct));
+        mm_state->cache_isolated = 0;
         return MM_SUCCESS;
     }
     return MM_FAILURE;
@@ -74,7 +75,7 @@ uint32_t mm_read(uint32_t addr){
 		return mm_state->ram[(addr - 0x80000000) / 4];
 	}
     if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){ // KSEG1 access
-        return mm_state->ram[(addr - 0xa0000000)/ 4];
+        return mm_state->ram[(addr & 0x1FFFFFFF)/ 4];
     }
     if(addr >= 0xbfc00000 && addr < 0xbfc00000 + MM_BIOS_SIZE){
         return mm_state->bios[(addr - 0xbfc00000)/ 4];
@@ -139,7 +140,7 @@ void mm_write(uint32_t addr, uint32_t data){
 		mm_state->ram[(addr - 0x80000000) / 4] = data;
 	}
     else if(addr >= 0xa0000000 && addr < 0xa0000000 + MM_RAM_SIZE){ // KSEG1
-        mm_state->ram[(addr - 0xa0000000)/ 4] = data;
+        mm_state->ram[(addr & 0x1FFFFFFF)/ 4] = data;
     }
     else if(addr >= 0xFFFE0000 && addr < 0xFFFE0000 + 512){
         switch (addr) {

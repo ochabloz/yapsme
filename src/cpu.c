@@ -78,7 +78,7 @@ uint32_t cpu_run(uint32_t nb_cycles){
     }
     else{
         uint32_t fetch = mm_read(cpu_state->PC);
-        if (nb_cycles > 12803155){ // 2857421
+        if (nb_cycles > 12803144){ // 2857421
             print_disassemble(fetch);
         }
         return cpu_execute(fetch);
@@ -223,7 +223,7 @@ uint32_t cpu_execute(uint32_t instruction){
                 break;
             case 0x27:
                 cpu_instruction_nor(rt, rd, rs);
-                printf("PC : 0x%08x, instruction: 0x%08x\n", cpu_state->PC, instruction);
+                //printf("PC : 0x%08x, instruction: 0x%08x\n", cpu_state->PC, instruction);
                 break;
             case 0x2a:
                 cpu_instruction_slt(rs, rt, rd);
@@ -462,7 +462,7 @@ void cp0_write_reg(uint8_t reg, uint32_t val){
 
 void cpu_trigger_exception(exception_t cause){
     // the jump address depends on the BEV field of the (sr) cop0_12 register (bit 22)
-    uint32_t jump_address = (cpu_state->cp0_regs[12] & (0x1 << 22)) ? 0xbfc00180 : 0x80000080;
+    uint32_t jump_address = (cpu_state->cp0_regs[12] & (0x1 << 22)) != 0 ?  0xbfc00180 : 0x80000080;
 
     uint8_t mode = cpu_state->cp0_regs[12] & 0x3f;
     cpu_state->cp0_regs[12] &= ~0x3f; // clear mode
@@ -470,7 +470,7 @@ void cpu_trigger_exception(exception_t cause){
 
     // CAUSE register
     cpu_state->cp0_regs[13] = cause << 2;
-
+    printf("exception : cause : %d\n", cause << 2);
     // EPC (exception program counter) register
     cpu_state->cp0_regs[14] = cpu_state->PC;
     cpu_state->PC = jump_address;
@@ -510,8 +510,9 @@ void cpu_instruction_sh(uint8_t r_source, uint8_t r_target, int16_t immediate){
         return;
     }
     uint32_t data = mm_read(addr & ~(0x3));
-    if(addr % 4){
+    if((addr % 4)){
         data = (data & 0xFFFF) | (cpu_state->regs[r_target] << 16);
+        
     }
     else{
         data = (data & 0xFFFF0000) | cpu_state->regs[r_target];
@@ -843,10 +844,24 @@ void print_disassemble(uint32_t instruction){
                 printf("sec_op 0x%02x, rt 0x%02x, imm5 0x%02x\n", sec_op, rt, imm5);
                 break;
             case 0x08:
-                printf("jr, $%d            # 0x%08x\n", rs, cpu_state->regs[rs]);
+                printf("jr, $%d\t\t\t# 0x%08x\n", rs, cpu_state->regs[rs]);
                 break;
+            case 0x24:
+                printf("and, $%02d, $%02d, $%02d\t\t\t# 0x%08x & 0x%08x\n", rd, rs, rt,
+                         cpu_state->regs[rs], cpu_state->regs[rt]);
+                break;
+            case 0x25:
+                printf("or, $%02d, $%02d, $%02d\t\t\t# 0x%08x | 0x%08x\n", rd, rs, rt,
+                         cpu_state->regs[rs], cpu_state->regs[rt]);
+                break;
+            
+            case 0x27:
+                printf("nor, $%02d, $%02d, $%02d\t\t\t# 0x%08x | 0x%08x\n", rd, rs, rt,
+                         cpu_state->regs[rs], cpu_state->regs[rt]);
+                break;
+
             default:
-                printf("sec_op 0x%02x, $%d = $%d, $%d\n", sec_op, rd, rs, rt);
+                printf("sec_op 0x%02x, $%02d = $%02d, $%02d\n", sec_op, rd, rs, rt);
                 break;
         }
     }
@@ -854,7 +869,7 @@ void print_disassemble(uint32_t instruction){
         switch (opcode) {
             case 0x04:
             case 0x05:
-                printf("%s $%d, $%d, 0x%08x\n", (opcode == 4) ? "beq" : "bne",
+                printf("%s $%02d, $%02d, 0x%08x\n", (opcode == 4) ? "beq" : "bne",
                                             rt, rs, cpu_state->PC + 4 + (((int16_t)imm16) << 2));
                 break;
             case 0x02:
@@ -863,39 +878,47 @@ void print_disassemble(uint32_t instruction){
                                                     (cpu_state->PC & 0xF0000000) | imm26 << 2);
                 break;
             case 0x07:
-                printf("bgtz $%d, %d            # 0x%08x\n",rs, (int16_t)imm16<<2,
+                printf("bgtz $%02d, %04d\t\t\t# 0x%08x\n",rs, (int16_t)imm16<<2,
                                                     cpu_state->PC + (imm16<<2));
                 break;
             case 0x08:
             case 0x09:
-                printf("%s $%d, $%d, %d        # 0x%08x + 0x%04x\n",
+                printf("%s $%02d, $%02d, %d\t\t\t# 0x%08x + 0x%04x\n",
                                         (opcode == 8) ? "addi" : "addiu" , rs, rt,
                                         (int16_t)imm16, cpu_state->regs[rs], imm16);
                 break;
             case 0x0d:
-                printf("ori, $%d, $%d,  0x%04x    # 0x%08x | 0x%04x\n", rs, rt, imm16,
+                printf("ori, $%d, $%d,  0x%04x\t\t# 0x%08x | 0x%04x\n", rs, rt, imm16,
                                                     cpu_state->regs[rs], imm16);
                 break;
             case 0x24:
-                printf("lbu, $%d, [$%d + %d]      #0x%08x = [0x%08x]\n",rt, rs,(int16_t)imm16<<2,
+                printf("lbu, $%d, [$%d + %d]\t\t# 0x%08x = [0x%08x]\n",rt, rs,(int16_t)imm16<<2,
                                             cpu_state->regs[rt], cpu_state->regs[rs] + (imm16<<2));
                 break;
+            case 0x25:
+                printf("lhu, $%d, [$%d + %d]\t# $%d <- [0x%08x]\n",rt, rs, (int16_t)imm16,
+                                            rt, cpu_state->regs[rs] + (imm16));
+                break;
             case 0x28:
-                printf("sb [$%d + %d], $%d        #[0x%08x] = 0x%08x\n", rs,(int16_t)imm16<<2,
+                printf("sb [$%d + %d], $%d\t\t\t# [0x%08x] = 0x%08x\n", rs,(int16_t)imm16<<2,
                                         rt, cpu_state->regs[rs] + (imm16<<2), cpu_state->regs[rt]);
+                break;
+            case 0x29:
+                printf("sh [$%02d + %02d], $%02d\t\t# [0x%08x] = 0x%08x\n", rs,(int16_t)imm16,
+                                        rt, cpu_state->regs[rs] + (imm16), cpu_state->regs[rt]);
                 break;
             case 0x0c:
             case 0x20:
             case 0x23:
-            case 0x29:
+
                 printf("OP 0x%02x, rs 0x%02x, rt 0x%02x, imm16 %d\n",opcode,rs, rt,(int16_t)imm16);
                 break;
             case 0x2b:
-                printf("sw [$%d + 0x%04x], $%d    # 0x%08x = 0x%08x\n",rs, imm16, rt,
+                printf("sw [$%d + 0x%04x], $%d\t\t# 0x%08x = 0x%08x\n",rs, imm16, rt,
                                         cpu_state->regs[rs] + (int16_t)imm16, cpu_state->regs[rt]);
                 break;
             case 0x0f:
-                printf("lui $%d, 0x%04x        # 0x%08x\n", rt, imm16, imm16 << 16);
+                printf("lui $%02d, 0x%04x\t\t\t# $%d <- 0x%08x\n", rt, imm16, rt, imm16 << 16);
                 break;
             default:
                 printf("OP 0x%02x, ", opcode);
