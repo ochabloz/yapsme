@@ -202,6 +202,9 @@ TEST(cpu_instruction, sh){ // store half word
     cpu_write_reg(1, 102, CPU_REG_DELAY_OFF); // $s
     cpu_execute(instr);
     LONGS_EQUAL(0xbbbbaaaa, mm_read(100));
+    cpu_write_reg(2, 0x1234, CPU_REG_DELAY_OFF); // $s
+    cpu_execute(instr);
+    LONGS_EQUAL(0x1234aaaa, mm_read(100));
 }
 
 
