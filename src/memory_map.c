@@ -14,6 +14,7 @@
 //
 #include "memory_map.h"
 #include "spu.h"
+#include "dma.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -80,6 +81,13 @@ uint32_t mm_read(uint32_t addr){
     }
     if(addr >= 0x1f000000 && addr < 0x1f000000 + 0x100){    // expansion 1
         return 0xffffffff; // the return value when nothing is connected to the expansion slot
+    }
+    if(addr >= 0x1F801080 && addr < 0x1F801100){    // DMA
+        return dma_read((addr - 0x1F801080) >> 4, addr & 0xF);
+    }
+    if(addr == 0x1F801810 || addr == 0x1F801814){    // GPU
+        if (addr == 0x1F801814) return 0x10000000;
+        return 0x00000000;
     }
     if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
         return spu_register_read(addr - 0x1f801C00);

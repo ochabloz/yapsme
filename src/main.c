@@ -15,6 +15,7 @@
 #include "cpu.h"
 #include "memory_map.h"
 #include "spu.h"
+#include "dma.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +31,7 @@ int main(int argc, char const *argv[]) {
     int bios_loaded = 0;
     mm_initialise();
     spu_init();
+    dma_initialise();
     while ((bios_file = readdir(bios_dir)) != NULL) {
         char filepath[85];
         if(strlen(bios_file->d_name) <= 80){
@@ -52,6 +54,7 @@ int main(int argc, char const *argv[]) {
             printf("cpu ran for %d cycles\n", i);
             break;
         }
+        if (i == 12858300) break;
     }
     return 0;
 }
