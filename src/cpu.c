@@ -92,7 +92,7 @@ uint32_t cpu_run(uint32_t nb_cycles){
     }
     else{
         uint32_t fetch = mm_read(cpu_state->PC);
-        if (nb_cycles > 12803144){ // 2857421
+        if (nb_cycles > 12848300){ // 2857421
             print_disassemble(fetch);
         }
         return cpu_execute(fetch);
@@ -111,6 +111,7 @@ void cpu_instruction_lui(uint8_t r_target, uint16_t immediate);
 void cpu_instruction_ori(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_andi(uint8_t r_source, uint8_t r_target, uint16_t immediate);
 void cpu_instruction_or(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
+void cpu_instruction_xor(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
 void cpu_instruction_nor(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
 void cpu_instruction_and(uint8_t r_target, uint8_t r_dest, uint8_t r_source);
 void cpu_instruction_sltu(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
@@ -234,6 +235,9 @@ uint32_t cpu_execute(uint32_t instruction){
                 break;
             case 0x25:
                 cpu_instruction_or(rt, rd, rs);
+                break;
+            case 0x26:
+                cpu_instruction_xor(rt, rd, rs);
                 break;
             case 0x27:
                 cpu_instruction_nor(rt, rd, rs);
@@ -484,7 +488,6 @@ void cpu_trigger_exception(exception_t cause){
 
     // CAUSE register
     cpu_state->cp0_regs[13] = cause << 2;
-    printf("exception : cause : %d\n", cause << 2);
     // EPC (exception program counter) register
     cpu_state->cp0_regs[14] = cpu_state->PC;
     cpu_state->PC = jump_address;
@@ -639,8 +642,8 @@ void cpu_instruction_j(uint32_t jump){
 // Jump and link
 // store return address to RA (register 31)
 void cpu_instruction_jal(uint32_t jump){
-    //printf("JAL: register r[%d] => 0x%08x\n",31, cpu_state->PC);
-    cpu_state->regs[31] = cpu_state->PC;
+    // store pc + 4 since the next instruction will be executed before the jump
+    cpu_state->regs[31] = cpu_state->PC + 4;
     cpu_state->PC_delay = (cpu_state->PC & (0xF0000000)) | jump;
 }
 
@@ -651,7 +654,8 @@ void cpu_instruction_jr(uint8_t r_source){
 }
 
 void cpu_instruction_jalr(uint8_t r_source, uint8_t r_dest){
-    cpu_state->regs[r_dest] = cpu_state->PC;
+    // store pc + 4 since the next instruction will be executed before the jump
+    cpu_state->regs[r_dest] = cpu_state->PC + 4;
     cpu_state->PC_delay = cpu_state->regs[r_source];
 }
 
@@ -704,6 +708,11 @@ void cpu_instruction_bxx(uint8_t r_source, uint8_t r_target, int16_t immediate){
 // OR
 void cpu_instruction_or(uint8_t r_target, uint8_t r_dest, uint8_t r_source){
     cpu_state->regs[r_dest] = cpu_state->regs[r_source] | cpu_state->regs[r_target];
+}
+
+// XOR
+void cpu_instruction_xor(uint8_t r_target, uint8_t r_dest, uint8_t r_source){
+    cpu_state->regs[r_dest] = cpu_state->regs[r_source] ^ cpu_state->regs[r_target];
 }
 
 // NOR
@@ -838,7 +847,7 @@ void cp0_instruction_rfe(uint8_t compl_opcode){
 
 
 void print_disassemble(uint32_t instruction){
-    printf("0x%08x : ", cpu_state->PC);
+    printf("0x%08x : 0x%08x\t(ra: 0x%08x)\t", cpu_state->PC, instruction, cpu_state->regs[31]);
     if(instruction == 0x00){
         printf("nop\n");
         return;
@@ -856,7 +865,8 @@ void print_disassemble(uint32_t instruction){
     if (opcode == 0) {
         switch (sec_op) {
             case 0x00:
-                printf("sec_op 0x%02x, rt 0x%02x, imm5 0x%02x\n", sec_op, rt, imm5);
+                printf("sll $%02d, $%02d, 0x%02x\t\t\t# 0x%08x = 0x%08x << 0x%02x\n", rd, rt, 
+                    imm5, cpu_state->regs[rt] << imm5, cpu_state->regs[rt], imm5);
                 break;
             case 0x08:
                 printf("jr, $%d\t\t\t# 0x%08x\n", rs, cpu_state->regs[rs]);
@@ -906,17 +916,21 @@ void print_disassemble(uint32_t instruction){
                 printf("ori, $%d, $%d,  0x%04x\t\t# 0x%08x | 0x%04x\n", rs, rt, imm16,
                                                     cpu_state->regs[rs], imm16);
                 break;
+            case 0x23:
+                printf("lw $%02d, [$%02d + 0x%05x]\t\t# 0x%08x<-[0x%08x]\n", rt, rs, imm16, 
+                    mm_read(cpu_state->regs[rs] + imm16), cpu_state->regs[rs] + imm16);
+                break;
             case 0x24:
-                printf("lbu, $%d, [$%d + %d]\t\t# 0x%08x = [0x%08x]\n",rt, rs,(int16_t)imm16<<2,
-                                            cpu_state->regs[rt], cpu_state->regs[rs] + (imm16<<2));
+                printf("lbu, $%d, [$%d + %d]\t\t# 0x%08x = [0x%08x]\n",rt, rs,(int16_t)imm16,
+                                            cpu_state->regs[rt], cpu_state->regs[rs] + (imm16));
                 break;
             case 0x25:
                 printf("lhu, $%d, [$%d + %d]\t# $%d <- [0x%08x]\n",rt, rs, (int16_t)imm16,
                                             rt, cpu_state->regs[rs] + (imm16));
                 break;
             case 0x28:
-                printf("sb [$%d + %d], $%d\t\t\t# [0x%08x] = 0x%08x\n", rs,(int16_t)imm16<<2,
-                                        rt, cpu_state->regs[rs] + (imm16<<2), cpu_state->regs[rt]);
+                printf("sb [$%d + %d], $%d\t\t\t# [0x%08x] = 0x%08x\n", rs,(int16_t)imm16,
+                                        rt, cpu_state->regs[rs] + (imm16), cpu_state->regs[rt]);
                 break;
             case 0x29:
                 printf("sh [$%02d + %02d], $%02d\t\t# [0x%08x] = 0x%08x\n", rs,(int16_t)imm16,
@@ -924,12 +938,10 @@ void print_disassemble(uint32_t instruction){
                 break;
             case 0x0c:
             case 0x20:
-            case 0x23:
-
                 printf("OP 0x%02x, rs 0x%02x, rt 0x%02x, imm16 %d\n",opcode,rs, rt,(int16_t)imm16);
                 break;
             case 0x2b:
-                printf("sw [$%d + 0x%04x], $%d\t\t# 0x%08x = 0x%08x\n",rs, imm16, rt,
+                printf("sw [$%d + 0x%04x], $%d\t\t# [0x%08x]<- 0x%08x\n",rs, imm16, rt,
                                         cpu_state->regs[rs] + (int16_t)imm16, cpu_state->regs[rt]);
                 break;
             case 0x0f:
