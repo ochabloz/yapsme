@@ -68,6 +68,8 @@ uint32_t mm_read(uint32_t addr){
     if(addr >= 0x1f000000 && addr < 0x1f000000 + 0x100){    // expansion 1
         return 0xffffffff; // the return value when nothing is connected to the expansion slot
     }
+    if (addr == 0x1F801070) return cpu_get_interrupt_status();
+    if (addr == 0x1F801074) return cpu_get_interrupt_mask();
     if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
         return spu_register_read(addr - 0x1f801C00);
     }

@@ -25,6 +25,8 @@ struct cpu_struct {
     uint8_t  R_delay_cpu;
 
     uint32_t cp0_regs[64];
+    uint32_t interrupt_status;
+    uint32_t interrupt_mask;
 };
 
 typedef struct cpu_struct * cpu_state_t;
@@ -39,6 +41,8 @@ uint32_t cpu_initialise(void){
         cpu_state->regs[0x00] = 0;
         cpu_state->R_delay_flag = CPU_REG_DELAY__NO_DATA_AVAILABLE;
         cpu_state->Branch_delay = 0;
+        cpu_state->interrupt_mask = 0;
+        cpu_state->interrupt_status = 0;
         return CPU_SUCCESS;
     }
     return CPU_FAILURE;
@@ -85,6 +89,15 @@ uint32_t cpu_run(uint32_t nb_cycles){
     }
 }
 
+uint32_t cpu_get_interrupt_status(){
+    return cpu_state->interrupt_status;
+}
+uint32_t cpu_get_interrupt_mask(){
+    return cpu_state->interrupt_mask;
+}
+void cpu_set_interrupt_mask(uint32_t mask){
+    cpu_state->interrupt_mask = mask;
+}
 
 uint32_t cp0_execute(uint32_t instruction);
 void cp0_instruction_mtc(uint8_t r_target, uint8_t r_dest);
