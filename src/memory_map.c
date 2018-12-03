@@ -14,6 +14,7 @@
 //
 #include "memory_map.h"
 #include "spu.h"
+#include "cpu.h"
 #include "dma.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,7 +89,7 @@ uint32_t mm_read(uint32_t addr){
         return dma_read((addr - 0x1F801080) >> 4, addr & 0xF);
     }
     if(addr == 0x1F801810 || addr == 0x1F801814){    // GPU
-        if (addr == 0x1F801814) return 0x10000000;
+        if (addr == 0x1F801814) return 0x1c000000;
         return 0x00000000;
     }
     if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
@@ -150,7 +151,10 @@ void mm_write(uint32_t addr, uint32_t data){
                 break;
             default:
             {
-                if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
+                if(addr >= 0x1F801080 && addr < 0x1F801100){    // DMA
+                    dma_write((addr - 0x1F801080) >> 4, addr & 0xF, data);
+                }
+                else if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
                     spu_register_write(addr - 0x1f801C00, data);
                 }else{
                     printf("IO write [0x%08x] = 0x%08x not implemented\n", addr, data);

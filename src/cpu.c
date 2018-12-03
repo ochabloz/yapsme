@@ -104,12 +104,14 @@ uint32_t cpu_run(uint32_t nb_cycles){
 }
 
 uint32_t cpu_get_interrupt_status(){
+    printf("INTERRUPT reading 0x%08x", cpu_state->interrupt_status);
     return cpu_state->interrupt_status;
 }
 uint32_t cpu_get_interrupt_mask(){
     return cpu_state->interrupt_mask;
 }
 void cpu_set_interrupt_mask(uint32_t mask){
+    printf("INTERRUPT MASK set 0x%08x", mask);
     cpu_state->interrupt_mask = mask;
 }
 
@@ -897,7 +899,10 @@ void print_disassemble(uint32_t instruction){
                 printf("nor, $%02d, $%02d, $%02d\t\t\t# 0x%08x | 0x%08x\n", rd, rs, rt,
                          cpu_state->regs[rs], cpu_state->regs[rt]);
                 break;
-
+            case 0x2a:
+                printf("slt, $%02d, $%02d, $%02d\t\t\t# %d < %d\n", rd, rs, rt,
+                         cpu_state->regs[rs], cpu_state->regs[rt]);
+                break;
             default:
                 printf("sec_op 0x%02x, $%02d = $%02d, $%02d\n", sec_op, rd, rs, rt);
                 break;

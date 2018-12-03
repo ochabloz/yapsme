@@ -28,6 +28,10 @@
 uint32_t cpu_initialise(void);
 uint32_t cpu_desinit(void);
 
+uint32_t cpu_get_interrupt_status();
+uint32_t cpu_get_interrupt_mask();
+void cpu_set_interrupt_mask(uint32_t mask);
+
 uint32_t cpu_execute(uint32_t instruction);
 
 uint32_t cpu_run(uint32_t nb_cycles);
