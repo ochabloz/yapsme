@@ -59,20 +59,36 @@ void dma_process_channel_control(uint32_t* channel_control, uint32_t value){
     uint32_t step = value & (0x01 << 1);
     uint32_t direction = value & (0x01 << 0);
     uint32_t base_addr = *(channel_control -2) & 0x00ffffff;
+    uint32_t start_now = value & (0x01 << 24);
+    uint32_t sync_mode = (value >> 9) & 0x3;
 
-    if(value & (0x01 << 24)){
+    if(start_now){
         // DMA transfert must start immediately
-        *channel_control = value & ~(0x01 << 24);
+        *channel_control = value & ~(0x01 << 24); // clear start_now bit
         uint16_t transfert_size = *(channel_control -1);
         if(channel_control == &dma_state->OTC_channel_control){ // Clear the ordering Table
             for(uint32_t i = 0; i < (transfert_size-1); i++)
             {
-                printf("DMA transfert :0x%08x ->[0x%08x]\n", base_addr -4, base_addr);
+                //printf("DMA transfert :0x%08x ->[0x%08x]\n", base_addr -4, base_addr);
                 mm_write(base_addr, base_addr-4);
                 base_addr -=4;
             }
             mm_write(base_addr, 0xffffff);
-            printf("DMA transfert :0x%08x ->[0x%08x]\n", 0xffffff, base_addr);
+            //printf("DMA transfert :0x%08x ->[0x%08x]\n", 0xffffff, base_addr);
+        }
+        if(channel_control == &dma_state->GPU_channel_control){
+            printf("base_addr = 0x%08x, sync_mode=%d, direction : %s\n", base_addr, sync_mode, (!direction) ? "+1" : "-1");
+            uint32_t addr = mm_read(base_addr);
+            uint8_t nb_bytes = addr >> 24;
+            addr &= 0xffffff;
+            printf("next element : 0x%06x, nb_bytes : %d\n", addr, nb_bytes);
+            
+            while(addr != 0xffffff){
+                addr = mm_read(addr);
+                nb_bytes = addr >> 24;
+                addr &= 0xffffff;
+                printf("next element : 0x%06x, nb_bytes : %d\n", addr, nb_bytes);
+            }
             
         }
     }
@@ -144,7 +160,7 @@ void dma_write(uint8_t number, uint8_t addr, uint32_t value){
         case 2:
             if (addr == 0x00) {dma_state->GPU_base_addr = value; break;}
             if (addr == 0x04) {dma_state->GPU_block_control = value; break;}
-            if (addr == 0x08) {dma_state->GPU_channel_control = value; break;}
+            if (addr == 0x08) {dma_process_channel_control(&dma_state->GPU_channel_control, value); break;}
             break;
         case 3:
             if (addr == 0x00) {dma_state->CDROM_base_addr = value; break;}

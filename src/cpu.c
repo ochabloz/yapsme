@@ -96,7 +96,7 @@ uint32_t cpu_run(uint32_t nb_cycles){
     }
     else{
         uint32_t fetch = mm_read(cpu_state->PC);
-        if (nb_cycles > 12848300){ // 2857421
+        if (nb_cycles > 22848300){ // 2857421
             print_disassemble(fetch);
         }
         return cpu_execute(fetch);
