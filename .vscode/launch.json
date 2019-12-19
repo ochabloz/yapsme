@@ -12,6 +12,7 @@
             "args": [
                 "-v"
             ],
+            "preLaunchTask": "${defaultBuildTask}",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
