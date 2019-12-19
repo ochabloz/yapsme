@@ -63,7 +63,10 @@ int main(int argc, char const *argv[])
             break;
         }
         if (i == 22858300)
+        {
+            printf("limit of cycles reached");
             break;
+        }
     }
     return 0;
 }
