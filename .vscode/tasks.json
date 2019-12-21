@@ -1,0 +1,47 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "project",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "yapsme"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "msys2-mingw64 build with debug symbols",
+            "type": "shell",
+            "command": "make bin",
+            "options": {
+                "shell": {
+                    "executable": "C:\\msys64\\usr\\bin\\bash.exe",
+                    "args": [
+                        "-c"
+                    ]
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "msys2-mingw64 clean",
+            "type": "shell",
+            "command": "make clean",
+            "options": {
+                "shell": {
+                    "executable": "C:\\msys64\\usr\\bin\\bash.exe",
+                    "args": [
+                        "-c"
+                    ]
+                }
+            },
+            "group": "build"
+        },
+    ]
+}

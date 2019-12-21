@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 # C compilation definition
-CC      := cc
+CC      := gcc
 CFLAGS    := -g -Wall
 CFLAGS  += -std=gnu99
 
@@ -55,6 +56,7 @@ all: makedir unittest yapsme
 
 test: makedir unittest
 
+bin: makedir yapsme
 
 
 unittest: $(OBJ_FILES_FLT) $(TST_OBJ_FILES)
@@ -65,8 +67,9 @@ unittest: $(OBJ_FILES_FLT) $(TST_OBJ_FILES)
 
 yapsme: $(OBJ_FILES)
 	$(CC) -o $(OBJ_DIR)$@ $^ $(LDFLAGS)
-	@echo "Now running" $@
-	$(OBJ_DIR)$@
+	
+run:
+	$(OBJ_DIR)yapsme
 
 
 

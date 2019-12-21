@@ -1,5 +1,6 @@
-## yaPSME
-#### _Yet Another PlayStation Emulator_
+# yaPSME
+
+## _Yet Another PlayStation Emulator_
 
 This is my attempt at emulating a PlayStation console.
 
@@ -9,9 +10,10 @@ The **yaPSME** project started as a way to practice _Test Driven Development_ us
 
 As of today the CPU and all of the PlayStation components will be emulated in LLE (_Low Level Emulation_).
 
-
 ## Usage
+
 This piece of software is not intended for general use and is provided as it is. Since better emulator for the PlayStation exists and I am only trying to reinvent the wheel, no support will be provided.
 
 ### Additional files
+
     - in order to boot, bios files must be present in the `bios/` folder
