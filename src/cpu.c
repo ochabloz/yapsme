@@ -910,6 +910,9 @@ void print_disassemble(uint32_t instruction){
     }
     else{
         switch (opcode) {
+            case 0x01:
+                printf("b%s%s , $%d, 0x%08x\n", (rt & 0x1) ? "gez" : "ltz", (rt & 0x10) ? "al" : "",rs, cpu_state->PC + (imm16 << 2));
+                break;
             case 0x04:
             case 0x05:
                 printf("%s $%02d, $%02d, 0x%08x\n", (opcode == 4) ? "beq" : "bne",
