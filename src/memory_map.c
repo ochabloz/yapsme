@@ -16,6 +16,7 @@
 #include "spu.h"
 #include "cpu.h"
 #include "dma.h"
+#include "gpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -88,9 +89,12 @@ uint32_t mm_read(uint32_t addr){
     if(addr >= 0x1F801080 && addr < 0x1F801100){    // DMA
         return dma_read((addr - 0x1F801080) >> 4, addr & 0xF);
     }
-    if(addr == 0x1F801810 || addr == 0x1F801814){    // GPU
-        if (addr == 0x1F801814) return 0x1c000000;
+    if(addr >= 0x1F801100 && addr < 0x1F80112C){    // Timers
         return 0x00000000;
+    }
+    if(addr == 0x1F801810 || addr == 0x1F801814){    // GPU
+        if (addr == 0x1F801814) return gpu_read_gpustat(); //0x1c000000;
+        return gpu_read_gpuread();
     }
     if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
         return spu_register_read(addr - 0x1f801C00);
@@ -139,19 +143,32 @@ void mm_write(uint32_t addr, uint32_t data){
         /*expansion 1 is not connected*/
     }
     else if(addr >= 0x1f800100 && addr < 0x1f800000 + 0x80000){ // IO map
-        switch (addr){
+        switch (addr){ 
             case 0x1f801010:
                 mm_state->bios_rom_size = data;
                 break;
             case 0x1f801060:
                 mm_state->ram_size = data;
                 break;
+            case 0x1f801074:
+                cpu_set_interrupt_mask(data);
+                break;
             case 0x1f801020:
                 mm_state->common_delay = data;
                 break;
+            case 0x1F801810:
+                gpu_gp0_write(data);
+                break;
+            case 0x1F801814:
+                gpu_gp1_write(data);
+                break;
             default:
-            {
-                if(addr >= 0x1F801080 && addr < 0x1F801100){    // DMA
+            {   
+                if(addr >= 0x1F801100 && addr < 0x1F801130){
+                    uint8_t timer_n = (addr & 0xf0) >> 4;
+                    printf("TIMER %d write: 0x%08x\n", timer_n, data);
+                }
+                else if(addr >= 0x1F801080 && addr < 0x1F801100){    // DMA
                     dma_write((addr - 0x1F801080) >> 4, addr & 0xF, data);
                 }
                 else if(addr >= 0x1f801C00 && addr < 0x1f802000){    // SPU
