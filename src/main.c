@@ -36,7 +36,7 @@ int main(int argc, char const *argv[])
     dma_initialise();
     while ((bios_file = readdir(bios_dir)) != NULL)
     {
-        char filepath[85];
+        char filepath[265];
         if (strlen(bios_file->d_name) <= 80)
         {
             sprintf(filepath, "bios/%s", bios_file->d_name);
