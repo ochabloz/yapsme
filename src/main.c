@@ -16,6 +16,7 @@
 #include "memory_map.h"
 #include "spu.h"
 #include "dma.h"
+#include "gpu.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -31,6 +32,7 @@ int main(int argc, char const *argv[])
         return 1;
     }
     int bios_loaded = 0;
+    gpu_initialise();
     mm_initialise();
     spu_init();
     dma_initialise();

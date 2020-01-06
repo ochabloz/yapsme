@@ -91,6 +91,10 @@ void dma_process_channel_control(uint32_t *channel_control, uint32_t value)
             printf("base_addr = 0x%08x, sync_mode=%d, direction : %s\n", base_addr, sync_mode, (!direction) ? "+1" : "-1");
             uint32_t header = base_addr;
             header &= 0xffffff;
+            if (sync_mode != 2)
+            {
+                printf("yay!!\n");
+            }
 
             while (header != 0xffffff)
             {

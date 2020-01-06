@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+uint32_t gpu_initialise(void);
 void gpu_gp0_write(uint32_t value);
 void gpu_gp1_write(uint32_t value);
 uint32_t gpu_read_gpustat();
