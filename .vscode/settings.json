@@ -9,5 +9,6 @@
         "memory_map.h": "c",
         "cpu.h": "c",
         "dirent.h": "c"
-    }
+    },
+    "editor.rulers": [100]
 }

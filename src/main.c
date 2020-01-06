@@ -62,11 +62,8 @@ int main(int argc, char const *argv[])
             printf("cpu ran for %d cycles\n", i);
             break;
         }
-        if (i == 22858300)
-        {
-            printf("limit of cycles reached");
-            break;
-        }
+        // if (i == 22858300)
+        //     break;
     }
     return 0;
 }

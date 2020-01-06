@@ -96,7 +96,7 @@ uint32_t cpu_run(uint32_t nb_cycles){
     }
     else{
         uint32_t fetch = mm_read(cpu_state->PC);
-        if (nb_cycles > 22848300){ // 2857421
+        if (nb_cycles > 97181900){ // 2857421
             print_disassemble(fetch);
         }
         return cpu_execute(fetch);
@@ -104,14 +104,14 @@ uint32_t cpu_run(uint32_t nb_cycles){
 }
 
 uint32_t cpu_get_interrupt_status(){
-    printf("INTERRUPT reading 0x%08x", cpu_state->interrupt_status);
+    printf("INTERRUPT reading 0x%08x\n", cpu_state->interrupt_status);
     return cpu_state->interrupt_status;
 }
 uint32_t cpu_get_interrupt_mask(){
     return cpu_state->interrupt_mask;
 }
 void cpu_set_interrupt_mask(uint32_t mask){
-    printf("INTERRUPT MASK set 0x%08x", mask);
+    printf("INTERRUPT MASK set 0x%08x\n", mask);
     cpu_state->interrupt_mask = mask;
 }
 
@@ -139,15 +139,20 @@ void cpu_instruction_add(uint8_t r_source, uint8_t r_target, uint8_t r_dest);
 
 void cpu_instruction_div(uint8_t r_source, uint8_t r_target);
 void cpu_instruction_divu(uint8_t r_source, uint8_t r_target);
+void cpu_instruction_multu(uint8_t r_source, uint8_t r_target);
 void cpu_instruction_mflo(uint8_t r_dest);
 void cpu_instruction_mtlo(uint8_t r_source);
 void cpu_instruction_mfhi(uint8_t r_dest);
 void cpu_instruction_mthi(uint8_t r_source);
 
 void cpu_instruction_sw(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_swl(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_swr(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sh(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_sb(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_lwl(uint8_t r_source, uint8_t r_target, int16_t immediate);
+void cpu_instruction_lwr(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lhu(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lh(uint8_t r_source, uint8_t r_target, int16_t immediate);
 void cpu_instruction_lb(uint8_t r_source, uint8_t r_target, int16_t immediate);
@@ -235,6 +240,8 @@ uint32_t cpu_execute(uint32_t instruction){
             case 0x1b:
                 cpu_instruction_divu(rs, rt);
                 break;
+            case 0x19:
+                cpu_instruction_multu(rs, rt);
             case 0x20:
                 cpu_instruction_add(rs, rt, rd);
                 break;
@@ -325,7 +332,10 @@ uint32_t cpu_execute(uint32_t instruction){
                 cpu_instruction_lb(rs, rt, imm16);
                 break;
             case 0x21:
-                cpu_instruction_lhu(rs, rt, imm16);
+                cpu_instruction_lh(rs, rt, imm16);
+                break;
+            case 0x22:
+                cpu_instruction_lwl(rs, rt, imm16);
                 break;
             case 0x23:
                 cpu_instruction_lw(rs, rt, imm16);
@@ -336,14 +346,23 @@ uint32_t cpu_execute(uint32_t instruction){
             case 0x25:
                 cpu_instruction_lhu(rs, rt, imm16);
                 break;
+            case 0x26:
+                cpu_instruction_lwl(rs, rt, imm16);
+                break;
             case 0x28:
                 cpu_instruction_sb(rs, rt, imm16);
                 break;
             case 0x29:
                 cpu_instruction_sh(rs, rt, imm16);
                 break;
-            case 0x2B:
+            case 0x2a:
+                cpu_instruction_swl(rs, rt, imm16);
+                break;
+            case 0x2b:
                 cpu_instruction_sw(rs, rt, imm16);
+                break;
+            case 0x2e:
+                cpu_instruction_swl(rs, rt, imm16);
                 break;
 
             default:
@@ -561,6 +580,48 @@ void cpu_instruction_sb(uint8_t r_source, uint8_t r_target, int16_t immediate){
     mm_write(addr, data);
 }
 
+void cpu_instruction_swl(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t addr = (cpu_state->regs[r_source] + immediate);
+    uint32_t val = mm_read(addr & ~0x3);
+    switch (addr & 0x3)
+    {
+    case 0:
+        val = (val & 0xffffff00) | (cpu_state->regs[r_target] >> 24);
+        break;
+    case 1:
+        val = (val & 0xffff0000) | (cpu_state->regs[r_target] >> 16);
+        break;
+    case 2:
+        val = (val & 0xff000000) | (cpu_state->regs[r_target] >> 8);
+        break;
+    case 3:
+        val = (val & 0x00000000) | (cpu_state->regs[r_target] >> 0);
+        break;
+    }
+    mm_write(addr, val);
+}
+
+void cpu_instruction_swr(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t addr = (cpu_state->regs[r_source] + immediate);
+    uint32_t val = mm_read(addr & ~0x3);
+    switch (addr & 0x3)
+    {
+    case 0:
+        val = (val & 0x00000000) | (cpu_state->regs[r_target] << 0);
+        break;
+    case 1:
+        val = (val & 0x000000ff) | (cpu_state->regs[r_target] << 8);
+        break;
+    case 2:
+        val = (val & 0x0000ffff) | (cpu_state->regs[r_target] << 16);
+        break;
+    case 3:
+        val = (val & 0x00ffffff) | (cpu_state->regs[r_target] << 24);
+        break;
+    }
+    mm_write(addr, val);
+}
+
 // load word : 32 bits loaded from memory to the target register (rt = mem[rs + imm16])
 void cpu_instruction_lw(uint8_t r_source, uint8_t r_target, int16_t immediate){
     uint32_t addr = cpu_state->regs[r_source] + immediate;
@@ -606,6 +667,50 @@ void cpu_instruction_lbu(uint8_t r_source, uint8_t r_target, int16_t immediate){
     uint32_t addr = (cpu_state->regs[r_source] + immediate);
     uint32_t val = (mm_read(addr & ~0x3) >> (8* (addr % 4))) & 0xFF;
     cpu_write_reg(r_target, val, CPU_REG_DELAY_ON);
+}
+
+void cpu_instruction_lwl(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t addr = (cpu_state->regs[r_source] + immediate);
+    uint32_t val = mm_read(addr & ~0x3);
+    switch (addr & 0x3)
+    {
+    case 0:
+        val = (cpu_state->regs[r_target] & 0x00ffffff) | (val << 24);
+        break;
+    case 1:
+        val = (cpu_state->regs[r_target] & 0x0000ffff) | (val << 16);
+        break;
+    case 2:
+        val = (cpu_state->regs[r_target] & 0x000000ff) | (val << 8);
+        break;
+    case 3:
+        val = (cpu_state->regs[r_target] & 0x00000000) | (val << 0);
+        break;
+    }
+
+    cpu_write_reg(r_target, val, CPU_REG_DELAY_OFF);
+}
+
+void cpu_instruction_lwr(uint8_t r_source, uint8_t r_target, int16_t immediate){
+    uint32_t addr = (cpu_state->regs[r_source] + immediate);
+    uint32_t val = mm_read(addr & ~0x3);
+    switch (addr & 0x3)
+    {
+    case 0:
+        val = (cpu_state->regs[r_target] & 0x00000000) | (val >> 0);
+        break;
+    case 1:
+        val = (cpu_state->regs[r_target] & 0xff000000) | (val >> 8);
+        break;
+    case 2:
+        val = (cpu_state->regs[r_target] & 0xffff0000) | (val >> 16);
+        break;
+    case 3:
+        val = (cpu_state->regs[r_target] & 0xffffff00) | (val >> 24);
+        break;
+    }
+    
+    cpu_write_reg(r_target, val, CPU_REG_DELAY_OFF);
 }
 
 // shift logical left
@@ -820,6 +925,14 @@ void cpu_instruction_divu(uint8_t r_source, uint8_t r_target){
     }
 }
 
+void cpu_instruction_multu(uint8_t r_source, uint8_t r_target){
+    uint64_t result = cpu_state->regs[r_source] * cpu_state->regs[r_target];
+    
+    cpu_state->LO = result >> 32;
+    cpu_state->HI = (uint32_t)result;
+    
+}
+
 void cpu_instruction_mflo(uint8_t r_dest){
     cpu_state->regs[r_dest] = cpu_state->LO;
 }
@@ -910,6 +1023,9 @@ void print_disassemble(uint32_t instruction){
     }
     else{
         switch (opcode) {
+            case 0x01:
+                printf("b%s%s , $%d, 0x%08x\n", (rt & 0x1) ? "gez" : "ltz", (rt & 0x10) ? "al" : "",rs, cpu_state->PC + (imm16 << 2));
+                break;
             case 0x04:
             case 0x05:
                 printf("%s $%02d, $%02d, 0x%08x\n", (opcode == 4) ? "beq" : "bne",
