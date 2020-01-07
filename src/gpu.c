@@ -10,9 +10,16 @@ struct gpu_struct
     uint32_t dma_direction;
     uint32_t reverse_flag;
     uint32_t display_mode;
+    uint32_t draw_mode;
     uint32_t horizontal_res2;
+    uint32_t interrupt_request;
+    uint32_t data_ready_for_read;
+    uint32_t page_base_x;
+    uint32_t page_base_y;
+    uint32_t vblank;
 
     uint32_t fifo[FIFO_SIZE];
+    uint32_t fifo_pointer;
 };
 
 typedef struct gpu_struct *gpu_state_t;
@@ -25,6 +32,13 @@ uint32_t gpu_initialise(void)
     {
         gpu_state = malloc(sizeof(struct gpu_struct));
         gpu_state->enabled = 0;
+        for (size_t i = 0; i < FIFO_SIZE; i++)
+        {
+            gpu_state->fifo[i] = 0;
+        }
+        gpu_state->fifo_pointer = 0;
+        gpu_state->data_ready_for_read = 0;
+        gpu_state->vblank = 0;
         return 1;
     }
     return 0;
@@ -34,7 +48,20 @@ void gpu_gp0_write(uint32_t value)
 {
     uint8_t op = value >> 24;
     uint32_t param = value & 0xFFFFFF;
-    printf("GPU: GP0 Received CMD: (0x%02x, 0x%06x) \n", op, param);
+    if (op == 0x1f && param == 0)
+    {
+        gpu_state->interrupt_request = 1;
+    }
+    else if (op == 0xe1) // draw mode setting
+    {
+        gpu_state->page_base_x = param & 0xf;
+        gpu_state->page_base_y = (param & 0x10) >> 4;
+        gpu_state->draw_mode = param & 0x7ff;
+    }
+    else
+    {
+        printf("GPU: GP0 Received CMD: (0x%02x, 0x%06x) \n", op, param);
+    }
 }
 
 void gpu_gp1_write(uint32_t value)
@@ -55,6 +82,7 @@ void gpu_gp1_write(uint32_t value)
     else if (op == 0x02)
     {
         printf("GPU: Ack IRQ\n");
+        gpu_state->interrupt_request = 0;
     }
     else if (op == 0x03)
     {
@@ -75,11 +103,11 @@ void gpu_gp1_write(uint32_t value)
     }
     else if (op == 0x06)
     {
-        printf("GPU: Horizontal display range: %d\n", param);
+        printf("GPU: Horizontal display range: 0x%08x\n", param);
     }
     else if (op == 0x07)
     {
-        printf("GPU: Vertical display range: %d\n", param);
+        printf("GPU: Vertical display range: 0x%08x\n", param);
     }
     else if (op == 0x08)
     {
@@ -130,9 +158,34 @@ uint32_t gpu_read_gpustat()
     29-30 DMA Direction (0=Off, 1=?, 2=CPUtoGP0, 3=GPUREADtoCPU)    ;GP1(04h).0-1
     31    Drawing even/odd lines in interlace mode (0=Even or Vblank, 1=Odd)
 */
-    uint32_t gpustat = 0x1c000000;
-    gpustat = gpustat | gpu_state->dma_direction << 29;
-    gpustat = gpustat | !(gpu_state->enabled << 23);
+    uint32_t gpustat = gpu_state->draw_mode & 0x7ff;
+    gpustat = gpustat | (gpu_state->dma_direction & 0x3) << 29;
+    gpustat = gpustat | ((gpu_state->enabled ? 0 : 1) << 23);
+    gpustat = gpustat | !(gpu_state->data_ready_for_read << 27);
+    gpustat |= 1 << 26; // always ready !
+    gpustat |= 1 << 28; // always ready !
+
+    gpustat |= gpu_state->vblank << 31;
+    gpu_state->vblank ^= 1;
+
+    uint8_t dma = 0;
+
+    switch (gpu_state->dma_direction)
+    {
+    case 1:
+        dma = 1; // fifo not full
+        break;
+    case 2:
+        dma = 1; // ready to receive dma blocks..
+    case 3:
+        dma = gpu_state->data_ready_for_read;
+        break;
+
+    default:
+        dma = 0;
+        break;
+    }
+    gpustat = gpustat | dma << 25;
     printf("GPU: Read GPUSTAT 0x%08x\n", gpustat);
     return gpustat;
 }

@@ -87,7 +87,7 @@ void dma_process_channel_control(uint32_t *channel_control, uint32_t value)
         if (channel_control == &dma_state->GPU_channel_control)
         {
 
-            printf("control register: 0x%08x\n", dma_state->DMA_control_register);
+            //printf("control register: 0x%08x\n", dma_state->DMA_control_register);
             printf("base_addr = 0x%08x, sync_mode=%d, direction : %s\n", base_addr, sync_mode, (!direction) ? "+1" : "-1");
             uint32_t header = base_addr;
             header &= 0xffffff;
@@ -96,11 +96,12 @@ void dma_process_channel_control(uint32_t *channel_control, uint32_t value)
                 printf("yay!!\n");
             }
 
-            while (header != 0xffffff)
+            while (!(header & 0x800000))
             {
-                header = mm_read(header);
+                uint32_t lw_addr = header & 0x1ffffc;
+                header = mm_read(lw_addr);
                 uint8_t nb_bytes = header >> 24;
-                uint32_t lw_addr = header;
+
                 while (nb_bytes > 0)
                 {
                     lw_addr = (lw_addr + 4) & 0x1ffffc;
@@ -110,7 +111,6 @@ void dma_process_channel_control(uint32_t *channel_control, uint32_t value)
                     nb_bytes -= 1;
                 }
 
-                header &= 0xffffff;
                 // printf("next element : 0x%06x, nb_bytes : %d\n", header, nb_bytes);
             }
         }
